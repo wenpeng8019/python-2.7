@@ -290,6 +290,8 @@ Py_Main(int argc, char **argv)
     PySys_ResetWarnOptions();
     _PyOS_ResetGetOpt();
 
+    // 解析命令行参数
+
     while ((c = _PyOS_GetOpt(argc, argv, PROGRAM_OPTS)) != EOF) {
         if (c == 'c') {
             /* -c is the last option; following arguments
@@ -438,9 +440,11 @@ Py_Main(int argc, char **argv)
         }
     }
 
+    // 显示帮助
     if (help)
         return usage(0, argv[0]);
 
+    // 显示版本号
     if (version) {
         fprintf(stderr, "Python %s\n", PY_VERSION);
         return 0;
@@ -449,6 +453,9 @@ Py_Main(int argc, char **argv)
     if (Py_Py3kWarningFlag && !Py_TabcheckFlag)
         /* -3 implies -t (but not -tt) */
         Py_TabcheckFlag = 1;
+
+
+    // 获取解析系统环境变量
 
     if (!Py_InspectFlag &&
         (p = Py_GETENV("PYTHONINSPECT")) && *p != '\0')
@@ -489,8 +496,10 @@ Py_Main(int argc, char **argv)
 #endif
     }
 
+    // 解析是否是命令行交互模式
     stdin_is_interactive = Py_FdIsInteractive(stdin, (char *)0);
 
+    // 初始化 stdio
     if (unbuffered) {
 #if defined(MS_WINDOWS) || defined(__CYGWIN__)
         _setmode(fileno(stdin), O_BINARY);
@@ -542,6 +551,8 @@ Py_Main(int argc, char **argv)
 #else
     Py_SetProgramName(argv[0]);
 #endif
+
+    // 初始化 Python 系统架构和运行环境
     Py_Initialize();
 
     if (Py_VerboseFlag ||
@@ -567,17 +578,21 @@ Py_Main(int argc, char **argv)
         argv[_PyOS_optind] = "-c";
     }
 
+    // 初始化 sys.argv；同时将 "当前路径" 添加到 sys.path 中（到第一项）
     PySys_SetArgv(argc-_PyOS_optind, argv+_PyOS_optind);
 
+    // （对于命令行交互模式）导入 `readline` 模块
     if ((Py_InspectFlag || (command == NULL && filename == NULL && module == NULL)) &&
         isatty(fileno(stdin))) {
         PyObject *v;
-        v = PyImport_ImportModule("readline");
+        v = ;
         if (v == NULL)
             PyErr_Clear();
         else
             Py_DECREF(v);
     }
+
+    /// （开始）运行 Python 脚本程序
 
     if (command) {
         sts = PyRun_SimpleStringFlags(command, &cf) != 0;

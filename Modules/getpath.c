@@ -397,58 +397,61 @@ calculate_path(void)
 #endif
 #endif
 
-        /* If there is no slash in the argv0 path, then we have to
-         * assume python is on the user's $PATH, since there's no
-         * other way to find a directory to start the search from.  If
-         * $PATH isn't exported, you lose.
-         */
-        if (strchr(prog, SEP))
-                strncpy(progpath, prog, MAXPATHLEN);
+    /// 计算 argv0，即 Python 主程序的文件路径
+
+    /* If there is no slash in the argv0 path, then we have to
+        * assume python is on the user's $PATH, since there's no
+        * other way to find a directory to start the search from.  If
+        * $PATH isn't exported, you lose.
+        */
+    if (strchr(prog, SEP))
+        strncpy(progpath, prog, MAXPATHLEN);
 #ifdef __APPLE__
-     /* On Mac OS X, if a script uses an interpreter of the form
-      * "#!/opt/python2.3/bin/python", the kernel only passes "python"
-      * as argv[0], which falls through to the $PATH search below.
-      * If /opt/python2.3/bin isn't in your path, or is near the end,
-      * this algorithm may incorrectly find /usr/bin/python. To work
-      * around this, we can use _NSGetExecutablePath to get a better
-      * hint of what the intended interpreter was, although this
-      * will fail if a relative path was used. but in that case,
-      * absolutize() should help us out below
-      */
-     else if(0 == _NSGetExecutablePath(progpath, &nsexeclength) && progpath[0] == SEP)
+    /* On Mac OS X, if a script uses an interpreter of the form
+     * "#!/opt/python2.3/bin/python", the kernel only passes "python"
+     * as argv[0], which falls through to the $PATH search below.
+     * If /opt/python2.3/bin isn't in your path, or is near the end,
+     * this algorithm may incorrectly find /usr/bin/python. To work
+     * around this, we can use _NSGetExecutablePath to get a better
+     * hint of what the intended interpreter was, although this
+     * will fail if a relative path was used. but in that case,
+     * absolutize() should help us out below
+     */
+    else if(0 == _NSGetExecutablePath(progpath, &nsexeclength) && progpath[0] == SEP)
        ;
 #endif /* __APPLE__ */
-        else if (path) {
-                while (1) {
-                        char *delim = strchr(path, DELIM);
 
-                        if (delim) {
-                                size_t len = delim - path;
-                                if (len > MAXPATHLEN)
-                                        len = MAXPATHLEN;
-                                strncpy(progpath, path, len);
-                                *(progpath + len) = '\0';
-                        }
-                        else
-                                strncpy(progpath, path, MAXPATHLEN);
+    else if (path) {
+            while (1) {
+                    char *delim = strchr(path, DELIM);
 
-                        joinpath(progpath, prog);
-                        if (isxfile(progpath))
-                                break;
+                    if (delim) {
+                            size_t len = delim - path;
+                            if (len > MAXPATHLEN)
+                                    len = MAXPATHLEN;
+                            strncpy(progpath, path, len);
+                            *(progpath + len) = '\0';
+                    }
+                    else
+                            strncpy(progpath, path, MAXPATHLEN);
 
-                        if (!delim) {
-                                progpath[0] = '\0';
-                                break;
-                        }
-                        path = delim + 1;
-                }
-        }
-        else
-                progpath[0] = '\0';
-        if (progpath[0] != SEP && progpath[0] != '\0')
-                absolutize(progpath);
-        strncpy(argv0_path, progpath, MAXPATHLEN);
-        argv0_path[MAXPATHLEN] = '\0';
+                    joinpath(progpath, prog);
+                    if (isxfile(progpath))
+                            break;
+
+                    if (!delim) {
+                            progpath[0] = '\0';
+                            break;
+                    }
+                    path = delim + 1;
+            }
+    }
+    else
+        progpath[0] = '\0';
+    if (progpath[0] != SEP && progpath[0] != '\0')
+            absolutize(progpath);
+    strncpy(argv0_path, progpath, MAXPATHLEN);
+    argv0_path[MAXPATHLEN] = '\0';
 
 #ifdef WITH_NEXT_FRAMEWORK
         /* On Mac OS X we have a special case if we're running from a framework.
@@ -510,6 +513,8 @@ calculate_path(void)
        MAXPATHLEN bytes long.
     */
 
+    /// 计算（基于 prefix 的）stdlib 路径（逻辑和 Python3 基本一致，但不支持 pyvenv.cfg 机制）
+
     if (!(pfound = search_for_prefix(argv0_path, home))) {
         if (!Py_FrozenFlag)
             fprintf(stderr,
@@ -519,6 +524,8 @@ calculate_path(void)
     }
     else
         reduce(prefix);
+
+    /// 计算 zip 包路径
 
     strncpy(zip_path, prefix, MAXPATHLEN);
     zip_path[MAXPATHLEN] = '\0';
@@ -533,6 +540,8 @@ calculate_path(void)
     zip_path[bufsz - 6] = VERSION[0];
     zip_path[bufsz - 5] = VERSION[2];
 
+    /// 计算（基于 exec_prefix 的）dylib 路径（逻辑和 Python3 基本一致）
+
     if (!(efound = search_for_exec_prefix(argv0_path, home))) {
         if (!Py_FrozenFlag)
             fprintf(stderr,
@@ -545,6 +554,8 @@ calculate_path(void)
     if ((!pfound || !efound) && !Py_FrozenFlag)
         fprintf(stderr,
                 "Consider setting $PYTHONHOME to <prefix>[:<exec_prefix>]\n");
+
+    /// 计算构造 module_search_path（逻辑和 Python3 基本一致）
 
     /* Calculate size of return buffer.
      */
@@ -584,6 +595,9 @@ calculate_path(void)
         module_search_path = PYTHONPATH;
     }
     else {
+
+        /// 首先，查找 $PYTHONPATH
+
         /* Run-time value of $PYTHONPATH goes first */
         if (rtpypath) {
             strcpy(buf, rtpypath);
@@ -592,9 +606,13 @@ calculate_path(void)
         else
             buf[0] = '\0';
 
+        /// 之后，查找 zip 包
+
         /* Next is the default zip path */
         strcat(buf, zip_path);
         strcat(buf, delimiter);
+
+        /// 然后，查找 stdlib / pythonpath.split.items
 
         /* Next goes merge of compile-time $PYTHONPATH with
          * dynamically located prefix.
@@ -622,12 +640,16 @@ calculate_path(void)
         }
         strcat(buf, delimiter);
 
+        /// 最后，查找 dylib
+
         /* Finally, on goes the directory for dynamic-load modules */
         strcat(buf, exec_prefix);
 
         /* And publish the results */
         module_search_path = buf;
     }
+
+    /// 计算 prefix 路径
 
     /* Reduce prefix and exec_prefix to their essence,
      * e.g. /usr/local/lib/python1.5 is reduced to /usr/local.
@@ -644,6 +666,8 @@ calculate_path(void)
     }
     else
         strncpy(prefix, PREFIX, MAXPATHLEN);
+
+    /// 计算 exec_prefix 路径
 
     if (efound > 0) {
         reduce(exec_prefix);

@@ -128,15 +128,20 @@ _PyImport_Init(void)
     /* prepare _PyImport_Filetab: copy entries from
        _PyImport_DynLoadFiletab and _PyImport_StandardFiletab.
      */
+     // 获取动态库的数量
 #ifdef HAVE_DYNAMIC_LOADING
     for (scan = _PyImport_DynLoadFiletab; scan->suffix != NULL; ++scan)
         ++countD;
 #endif
+
+     // 获取标准库的数量
     for (scan = _PyImport_StandardFiletab; scan->suffix != NULL; ++scan)
         ++countS;
+
     filetab = PyMem_NEW(struct filedescr, countD + countS + 1);
     if (filetab == NULL)
         Py_FatalError("Can't initialize import file table.");
+
 #ifdef HAVE_DYNAMIC_LOADING
     memcpy(filetab, _PyImport_DynLoadFiletab,
            countD * sizeof(struct filedescr));
@@ -148,6 +153,7 @@ _PyImport_Init(void)
     _PyImport_Filetab = filetab;
 
     if (Py_OptimizeFlag) {
+
         /* Replace ".pyc" with ".pyo" in _PyImport_Filetab */
         for (; filetab->suffix != NULL; filetab++) {
 #ifndef RISCOS
@@ -189,6 +195,7 @@ _PyImportHooks_Init(void)
     Py_DECREF(v);
     if (err)
         goto error;
+
     v = PyDict_New();
     if (v == NULL)
         goto error;
@@ -196,6 +203,7 @@ _PyImportHooks_Init(void)
     Py_DECREF(v);
     if (err)
         goto error;
+
     path_hooks = PyList_New(0);
     if (path_hooks == NULL)
         goto error;
@@ -208,6 +216,7 @@ _PyImportHooks_Init(void)
                       );
     }
 
+    // 初始化 zip 包导入机制
     zimpimport = PyImport_ImportModule("zipimport");
     if (zimpimport == NULL) {
         PyErr_Clear(); /* No zip import module -- okay */

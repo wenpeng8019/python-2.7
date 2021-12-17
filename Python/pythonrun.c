@@ -174,14 +174,18 @@ Py_InitializeEx(int install_sigs)
 
     _PyRandom_Init();
 
+    // 创建解释器
     interp = PyInterpreterState_New();
     if (interp == NULL)
         Py_FatalError("Py_Initialize: can't make first interpreter");
 
+    // 创建处理线程
     tstate = PyThreadState_New(interp);
     if (tstate == NULL)
         Py_FatalError("Py_Initialize: can't make first thread");
     (void) PyThreadState_Swap(tstate);
+
+    /// 初始化基本数据类型对象
 
     _Py_ReadyTypes();
 
@@ -199,6 +203,7 @@ Py_InitializeEx(int install_sigs)
 
     _PyFloat_Init();
 
+    // 创建 module 管理集合
     interp->modules = PyDict_New();
     if (interp->modules == NULL)
         Py_FatalError("Py_Initialize: can't make modules dictionary");
@@ -211,6 +216,7 @@ Py_InitializeEx(int install_sigs)
     _PyUnicode_Init();
 #endif
 
+    // 创建 builtins 模块对象
     bimod = _PyBuiltin_Init();
     if (bimod == NULL)
         Py_FatalError("Py_Initialize: can't initialize __builtin__");
@@ -219,6 +225,7 @@ Py_InitializeEx(int install_sigs)
         Py_FatalError("Py_Initialize: can't initialize builtins dict");
     Py_INCREF(interp->builtins);
 
+    // 创建 sys 模块对象
     sysmod = _PySys_Init();
     if (sysmod == NULL)
         Py_FatalError("Py_Initialize: can't initialize sys");
@@ -227,12 +234,19 @@ Py_InitializeEx(int install_sigs)
         Py_FatalError("Py_Initialize: can't initialize sys dict");
     Py_INCREF(interp->sysdict);
     _PyImport_FixupExtension("sys", "sys");
+
+    // 初始化设置 sys.path
+    // + 这里的 `Py_GetPath()` 会计算并构造 import 的查找路径
     PySys_SetPath(Py_GetPath());
+
+    // 将 module 管理集合添加到 sys 模块的命名空间
     PyDict_SetItemString(interp->sysdict, "modules",
                          interp->modules);
 
+    // 初始化 import 机制
     _PyImport_Init();
 
+    // 初始化 exceptions 模块
     /* initialize builtin exceptions */
     _PyExc_Init();
     _PyImport_FixupExtension("exceptions", "exceptions");
@@ -240,11 +254,14 @@ Py_InitializeEx(int install_sigs)
     /* phase 2 of builtins */
     _PyImport_FixupExtension("__builtin__", "__builtin__");
 
+    // 初始化 import hook 机制
+    // + 添加 sys.path_hooks、sys.path_importer_cache 以及设置 zipimport
     _PyImportHooks_Init();
 
     if (install_sigs)
         initsigs(); /* Signal handling stuff, including initintr() */
 
+    // 初始化 warnings 模块
     /* Initialize warnings. */
     _PyWarnings_Init();
     if (PySys_HasWarnOptions()) {
@@ -254,6 +271,7 @@ Py_InitializeEx(int install_sigs)
         Py_XDECREF(warnings_module);
     }
 
+    // 初始化 __main__ 模块
     initmain(); /* Module __main__ */
 
     /* auto-thread-state API, if available */
@@ -261,8 +279,11 @@ Py_InitializeEx(int install_sigs)
     _PyGILState_Init(interp, tstate);
 #endif /* WITH_THREAD */
 
+    // 初始化 site 导入机制
     if (!Py_NoSiteFlag)
         initsite(); /* Module site */
+
+    /// 初始化语言字符集
 
     if ((p = Py_GETENV("PYTHONIOENCODING")) && *p != '\0') {
         p = icodeset = codeset = strdup(p);
@@ -328,6 +349,8 @@ Py_InitializeEx(int install_sigs)
         sprintf(buf, "cp%d", GetConsoleOutputCP());
     }
 #endif
+
+    /// 初始化 stdio 的字符集
 
     if (codeset) {
         sys_stream = PySys_GetObject("stdin");

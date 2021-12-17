@@ -536,24 +536,33 @@ def main():
     global ENABLE_USER_SITE
 
     abs__file__()
+
     known_paths = removeduppaths()
     if (os.name == "posix" and sys.path and
         os.path.basename(sys.path[-1]) == "Modules"):
         addbuilddir()
+        
     if ENABLE_USER_SITE is None:
         ENABLE_USER_SITE = check_enableusersite()
+
     known_paths = addusersitepackages(known_paths)
+
     known_paths = addsitepackages(known_paths)
+
     if sys.platform == 'os2emx':
         setBEGINLIBPATH()
+
     setquit()
     setcopyright()
     sethelper()
+
     aliasmbcs()
     setencoding()
+
     execsitecustomize()
     if ENABLE_USER_SITE:
         execusercustomize()
+
     # Remove sys.setdefaultencoding() so that users cannot change the
     # encoding after initialization.  The test for presence is needed when
     # this module is run as a script, because this code is executed twice.
