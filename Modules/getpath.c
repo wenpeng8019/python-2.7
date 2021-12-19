@@ -265,6 +265,8 @@ search_for_prefix(char *argv0_path, char *home)
     char *vpath;
 
     /* If PYTHONHOME is set, we believe it unconditionally */
+    // 首先，以系统环境变量 $PYTHONHOME 的设定为准
+    // + $PYTHONHOME / lib / pythonX.Y /
     if (home) {
         char *delim;
         strncpy(prefix, home, MAXPATHLEN);
@@ -277,6 +279,11 @@ search_for_prefix(char *argv0_path, char *home)
     }
 
     /* Check to see if argv[0] is in the build directory */
+    // 其次，对于编译输出的 Python 主程序
+    // + argv0_path / <vpath> / lib / pythonX.Y /
+    //   这个版本并不是安装版本，它是开发对源码进行编译后，直接输出版本。
+    //   这主要是面向开发人员的，常用于调试操作。
+    //   这里的 Modules/ 和源码目录结构中的 Modules/ 的概念相似
     strcpy(prefix, argv0_path);
     joinpath(prefix, "Modules/Setup");
     if (isfile(prefix)) {
@@ -291,6 +298,8 @@ search_for_prefix(char *argv0_path, char *home)
     }
 
     /* Search from argv0_path, until root is found */
+    // 再次，在 argv0_path 的祖父目录中查找 LANDMARK
+    // + 也就是 argv0_path / ... / lib / pythonX.Y /
     copy_absolute(prefix, argv0_path);
     do {
         n = strlen(prefix);
@@ -303,6 +312,8 @@ search_for_prefix(char *argv0_path, char *home)
     } while (prefix[0]);
 
     /* Look at configure's PREFIX */
+    // 最后，由编译宏定义 PREFIX 来确定
+    // + 即 <PREFIX> / lib / pythonX.Y /
     strncpy(prefix, PREFIX, MAXPATHLEN);
     joinpath(prefix, lib_python);
     joinpath(prefix, LANDMARK);
@@ -312,7 +323,7 @@ search_for_prefix(char *argv0_path, char *home)
     /* Fail */
     return 0;
 }
-
+F
 
 /* search_for_exec_prefix requires that argv0_path be no more than
    MAXPATHLEN bytes long.
@@ -487,6 +498,8 @@ calculate_path(void)
     }
 #endif
 
+    // 如果 executable（Python 主程序）是链接文件，则解析它的源文件
+
 #if HAVE_READLINK
     {
         char tmpbuffer[MAXPATHLEN+1];
@@ -508,7 +521,9 @@ calculate_path(void)
     }
 #endif /* HAVE_READLINK */
 
+    // 将 executable 所在目录路径作为 `argv0_path` 
     reduce(argv0_path);
+
     /* At this point, argv0_path is guaranteed to be less than
        MAXPATHLEN bytes long.
     */
