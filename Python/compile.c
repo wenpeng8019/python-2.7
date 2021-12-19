@@ -250,7 +250,14 @@ compiler_init(struct compiler *c)
 PyCodeObject *
 PyAST_Compile(mod_ty mod, const char *filename, PyCompilerFlags *flags,
               PyArena *arena)
-{
+{   // @ extern
+    // @ PyNode_Compile
+    // @ run_mod
+    // @ Py_CompileStringFlags
+    // @ parse_source_module
+    // @ builtin_compile
+    // @ parser_compilest 
+
     struct compiler c;
     PyCodeObject *co = NULL;
     PyCompilerFlags local_flags;

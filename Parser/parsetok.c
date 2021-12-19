@@ -51,6 +51,7 @@ PyParser_ParseStringFlagsFilenameEx(const char *s, const char *filename,
 
     initerr(err_ret, filename);
 
+    // 构建分词器
     if ((tok = PyTokenizer_FromString(s, start == file_input)) == NULL) {
         err_ret->error = PyErr_Occurred() ? E_DECODE : E_NOMEM;
         return NULL;
@@ -63,6 +64,7 @@ PyParser_ParseStringFlagsFilenameEx(const char *s, const char *filename,
             tok->alterror++;
     }
 
+    // 执行词法分析
     return parsetok(tok, g, start, err_ret, flags);
 }
 
@@ -92,10 +94,12 @@ PyParser_ParseFileFlagsEx(FILE *fp, const char *filename, grammar *g, int start,
 
     initerr(err_ret, filename);
 
+    // 构建分词器
     if ((tok = PyTokenizer_FromFile(fp, ps1, ps2)) == NULL) {
         err_ret->error = E_NOMEM;
         return NULL;
     }
+    
     tok->filename = filename;
     if (Py_TabcheckFlag || Py_VerboseFlag) {
         tok->altwarning = (filename != NULL);

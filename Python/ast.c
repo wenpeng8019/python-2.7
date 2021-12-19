@@ -215,7 +215,10 @@ num_stmts(const node *n)
 mod_ty
 PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
                PyArena *arena)
-{
+{   // @ PyParser_ASTFromString
+    // @ PyParser_ASTFromFile
+    // @ PyNode_Compile
+
     int i, j, k, num;
     asdl_seq *stmts = NULL;
     stmt_ty s;

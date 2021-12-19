@@ -1327,7 +1327,13 @@ PyErr_Display(PyObject *exception, PyObject *value, PyObject *tb)
 PyObject *
 PyRun_StringFlags(const char *str, int start, PyObject *globals,
                   PyObject *locals, PyCompilerFlags *flags)
-{
+{   // @ extern
+    // @ PyRun_String
+    // @ PyRun_SimpleStringFlags
+    // @ builtin_eval
+    // @ builtin_input
+    // @ exec_statement
+
     PyObject *ret = NULL;
     mod_ty mod;
     PyArena *arena = PyArena_New();
@@ -1370,10 +1376,15 @@ run_mod(mod_ty mod, const char *filename, PyObject *globals, PyObject *locals,
 {
     PyCodeObject *co;
     PyObject *v;
+
+    // 编译生成字节码
     co = PyAST_Compile(mod, filename, flags, arena);
     if (co == NULL)
         return NULL;
+
+    // 解释执行字节码
     v = PyEval_EvalCode(co, globals, locals);
+
     Py_DECREF(co);
     return v;
 }
@@ -1413,7 +1424,9 @@ run_pyc_file(FILE *fp, const char *filename, PyObject *globals,
 PyObject *
 Py_CompileStringFlags(const char *str, const char *filename, int start,
                       PyCompilerFlags *flags)
-{
+{   // @ Py_CompileString
+    // @ builtin_compile
+
     PyCodeObject *co;
     mod_ty mod;
     PyArena *arena = PyArena_New();
@@ -1461,12 +1474,17 @@ Py_SymtableString(const char *str, const char *filename, int start)
 mod_ty
 PyParser_ASTFromString(const char *s, const char *filename, int start,
                        PyCompilerFlags *flags, PyArena *arena)
-{
+{   // @ extern
+    // @ PyRun_StringFlags
+    // @ Py_CompileStringFlags
+    // @ Py_SymtableString
+
     mod_ty mod;
     PyCompilerFlags localflags;
     perrdetail err;
     int iflags = PARSER_FLAGS(flags);
 
+    // 执行词法解析，返回 concrete syntax tree (CST) 树
     node *n = PyParser_ParseStringFlagsFilenameEx(s, filename,
                                     &_PyParser_Grammar, start, &err,
                                     &iflags);
@@ -1474,6 +1492,8 @@ PyParser_ASTFromString(const char *s, const char *filename, int start,
         localflags.cf_flags = 0;
         flags = &localflags;
     }
+
+    // （如果词法解析成功）将 concrete syntax tree (CST) 树转换为 abstract syntax tree (AST)
     if (n) {
         flags->cf_flags |= iflags & PyCF_MASK;
         mod = PyAST_FromNode(n, flags, filename, arena);
@@ -1490,7 +1510,10 @@ mod_ty
 PyParser_ASTFromFile(FILE *fp, const char *filename, int start, char *ps1,
                      char *ps2, PyCompilerFlags *flags, int *errcode,
                      PyArena *arena)
-{
+{   // @ PyRun_FileExFlags
+    // @ PyRun_InteractiveOneFlags
+    // @ parse_source_module
+
     mod_ty mod;
     PyCompilerFlags localflags;
     perrdetail err;
@@ -1502,6 +1525,8 @@ PyParser_ASTFromFile(FILE *fp, const char *filename, int start, char *ps1,
         localflags.cf_flags = 0;
         flags = &localflags;
     }
+
+    // （如果词法解析成功）将 concrete syntax tree (CST) 树转换为 abstract syntax tree (AST)
     if (n) {
         flags->cf_flags |= iflags & PyCF_MASK;
         mod = PyAST_FromNode(n, flags, filename, arena);

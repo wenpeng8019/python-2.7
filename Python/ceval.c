@@ -1096,6 +1096,8 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         /* Main switch on opcode */
         READ_TIMESTAMP(inst0);
 
+        /// 派发执行操作码（opcode）
+
         switch (opcode) {
 
         /* BEWARE!
@@ -3030,6 +3032,8 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
 
     assert(tstate != NULL);
     assert(globals != NULL);
+
+    // 创建调用栈场景
     f = PyFrame_New(tstate, co, globals, locals);
     if (f == NULL)
         return NULL;
@@ -3081,6 +3085,7 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
                 PyTuple_SET_ITEM(u, i-n, x);
             }
         }
+
         for (i = 0; i < kwcount; i++) {
             PyObject **co_varnames;
             PyObject *keyword = kws[2*i];
