@@ -405,7 +405,10 @@ static char pendingbusy = 0;
 
 int
 Py_AddPendingCall(int (*func)(void *), void *arg)
-{
+{   // @ extern
+    // @ trip_signal
+    // @ intcatcher
+
     int i, j, result=0;
     PyThread_type_lock lock = pending_lock;
 
@@ -620,6 +623,7 @@ _Py_CheckRecursiveCall(char *where)
 {
     PyThreadState *tstate = PyThreadState_GET();
 
+    // 栈溢出检查
 #ifdef USE_STACKCHECK
     if (PyOS_CheckStack()) {
         --tstate->recursion_depth;
@@ -627,13 +631,17 @@ _Py_CheckRecursiveCall(char *where)
         return -1;
     }
 #endif
+
     if (tstate->recursion_depth > recursion_limit) {
+
         --tstate->recursion_depth;
+
         PyErr_Format(PyExc_RuntimeError,
                      "maximum recursion depth exceeded%s",
                      where);
         return -1;
     }
+
     _Py_CheckRecursionLimit = recursion_limit;
     return 0;
 }
@@ -4694,6 +4702,7 @@ build_class(PyObject *methods, PyObject *bases, PyObject *name)
 
     if (PyDict_Check(methods))
         metaclass = PyDict_GetItemString(methods, "__metaclass__");
+
     if (metaclass != NULL)
         Py_INCREF(metaclass);
     else if (PyTuple_Check(bases) && PyTuple_GET_SIZE(bases) > 0) {
@@ -4713,6 +4722,7 @@ build_class(PyObject *methods, PyObject *bases, PyObject *name)
             metaclass = (PyObject *) &PyClass_Type;
         Py_INCREF(metaclass);
     }
+
     result = PyObject_CallFunctionObjArgs(metaclass, name, bases, methods,
                                           NULL);
     Py_DECREF(metaclass);
@@ -4757,6 +4767,7 @@ exec_statement(PyFrameObject *f, PyObject *prog, PyObject *globals,
             locals = PyTuple_GetItem(prog, 2);
         prog = PyTuple_GetItem(prog, 0);
     }
+
     if (globals == Py_None) {
         globals = PyEval_GetGlobals();
         if (locals == Py_None) {
@@ -4771,6 +4782,7 @@ exec_statement(PyFrameObject *f, PyObject *prog, PyObject *globals,
     }
     else if (locals == Py_None)
         locals = globals;
+
     if (!PyString_Check(prog) &&
 #ifdef Py_USING_UNICODE
         !PyUnicode_Check(prog) &&
@@ -4781,33 +4793,43 @@ exec_statement(PyFrameObject *f, PyObject *prog, PyObject *globals,
             "exec: arg 1 must be a string, file, or code object");
         return -1;
     }
+
     if (!PyDict_Check(globals)) {
         PyErr_SetString(PyExc_TypeError,
             "exec: arg 2 must be a dictionary or None");
         return -1;
     }
+
     if (!PyMapping_Check(locals)) {
         PyErr_SetString(PyExc_TypeError,
             "exec: arg 3 must be a mapping or None");
         return -1;
     }
+
     if (PyDict_GetItemString(globals, "__builtins__") == NULL)
         PyDict_SetItemString(globals, "__builtins__", f->f_builtins);
+    
     if (PyCode_Check(prog)) {
+
         if (PyCode_GetNumFree((PyCodeObject *)prog) > 0) {
             PyErr_SetString(PyExc_TypeError,
         "code object passed to exec may not contain free variables");
             return -1;
         }
+
+        // 执行字节（机器）码
         v = PyEval_EvalCode((PyCodeObject *) prog, globals, locals);
     }
     else if (PyFile_Check(prog)) {
+
         FILE *fp = PyFile_AsFile(prog);
         char *name = PyString_AsString(PyFile_Name(prog));
         PyCompilerFlags cf;
         if (name == NULL)
             return -1;
         cf.cf_flags = 0;
+
+
         if (PyEval_MergeCompilerFlags(&cf))
             v = PyRun_FileFlags(fp, name, Py_file_input, globals,
                                 locals, &cf);
@@ -4816,6 +4838,7 @@ exec_statement(PyFrameObject *f, PyObject *prog, PyObject *globals,
                            locals);
     }
     else {
+
         PyObject *tmp = NULL;
         char *str;
         PyCompilerFlags cf;
@@ -4831,13 +4854,18 @@ exec_statement(PyFrameObject *f, PyObject *prog, PyObject *globals,
 #endif
         if (PyString_AsStringAndSize(prog, &str, NULL))
             return -1;
+
+
         if (PyEval_MergeCompilerFlags(&cf))
             v = PyRun_StringFlags(str, Py_file_input, globals,
                                   locals, &cf);
         else
             v = PyRun_String(str, Py_file_input, globals, locals);
+
+
         Py_XDECREF(tmp);
     }
+
     if (plain)
         PyFrame_LocalsToFast(f, 0);
     if (v == NULL)

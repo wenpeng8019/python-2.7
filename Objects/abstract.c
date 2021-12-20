@@ -2524,16 +2524,25 @@ PyObject_Call(PyObject *func, PyObject *arg, PyObject *kw)
 
     if ((call = func->ob_type->tp_call) != NULL) {
         PyObject *result;
+
+        // 调用栈场景栈压栈
         if (Py_EnterRecursiveCall(" while calling a Python object"))
             return NULL;
+
         result = (*call)(func, arg, kw);
+        
+        // 调用栈场景栈出栈
         Py_LeaveRecursiveCall();
+
+
         if (result == NULL && !PyErr_Occurred())
             PyErr_SetString(
                 PyExc_SystemError,
                 "NULL result without error in PyObject_Call");
+
         return result;
     }
+    
     PyErr_Format(PyExc_TypeError, "'%.200s' object is not callable",
                  func->ob_type->tp_name);
     return NULL;
