@@ -448,7 +448,10 @@ Py_AddPendingCall(int (*func)(void *), void *arg)
 
 int
 Py_MakePendingCalls(void)
-{
+{   // @ extern
+    // @ Py_Main
+    // @ PyEval_EvalFrameEx
+
     int i;
     int r = 0;
 
@@ -1010,6 +1013,10 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         assert(stack_pointer >= f->f_valuestack); /* else underflow */
         assert(STACK_LEVEL() <= co->co_stacksize);  /* else overflow */
 
+        // 协同并行调度处理
+        // + 相当于处理消息队列，即中断执行其他并行调用。
+        //   例如，通过嵌入式 C 执行的调用
+
         /* Do periodic things.  Doing this every time through
            the loop would add too much overhead, so we do it
            only every Nth instruction.  We also do it if
@@ -1018,22 +1025,33 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
            async I/O handler); see Py_AddPendingCall() and
            Py_MakePendingCalls() above. */
 
+        // 达到一个调度周期
         if (--_Py_Ticker < 0) {
+
             if (*next_instr == SETUP_FINALLY) {
                 /* Make the last opcode before
                    a try: finally: block uninterruptible. */
                 goto fast_next_opcode;
             }
+
+            // 重置调度周期间隔
+            // + 默认 _Py_CheckInterval == 100，即 100 个指令
             _Py_Ticker = _Py_CheckInterval;
             tstate->tick_counter++;
+
 #ifdef WITH_TSC
             ticked = 1;
 #endif
+
+            // 存在挂起的并行调用
             if (pendingcalls_to_do) {
+
+                // 执行挂起的并行调用
                 if (Py_MakePendingCalls() < 0) {
                     why = WHY_EXCEPTION;
                     goto on_error;
                 }
+
                 if (pendingcalls_to_do)
                     /* MakePendingCalls() didn't succeed.
                        Force early re-execution of this
@@ -1041,6 +1059,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                        a thread switch */
                     _Py_Ticker = 0;
             }
+
 #ifdef WITH_THREAD
             if (interpreter_lock) {
                 /* Give another thread a chance */
@@ -1068,6 +1087,9 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             }
 #endif
         } // if (--_Py_Ticker < 0)
+
+
+    /// 执行指令集
 
     // 快速入口 1: 读取下一个（指令）操作码
     fast_next_opcode:
@@ -3102,6 +3124,7 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
                 i++;
             SETLOCAL(i, kwdict);
         }
+
         if (argcount > co->co_argcount) {
             if (!(co->co_flags & CO_VARARGS)) {
                 PyErr_Format(PyExc_TypeError,
@@ -3116,11 +3139,13 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
             }
             n = co->co_argcount;
         }
+
         for (i = 0; i < n; i++) {
             x = args[i];
             Py_INCREF(x);
             SETLOCAL(i, x);
         }
+
         if (co->co_flags & CO_VARARGS) {
             u = PyTuple_New(argcount - n);
             if (u == NULL)
@@ -3196,7 +3221,9 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
             }
             Py_INCREF(value);
             SETLOCAL(j, value);
-        }
+
+        } // for (i = 0; i < kwcount; i++)
+
         if (argcount < co->co_argcount) {
             int m = co->co_argcount - defcount;
             for (i = argcount; i < m; i++) {
@@ -3228,7 +3255,9 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
                 }
             }
         }
-    }
+
+    } // if (co->co_argcount > 0 || co->co_flags & (CO_VARARGS | CO_VARKEYWORDS))
+
     else if (argcount > 0 || kwcount > 0) {
         PyErr_Format(PyExc_TypeError,
                      "%.200s() takes no arguments (%d given)",
@@ -3236,6 +3265,7 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
                      argcount + kwcount);
         goto fail;
     }
+
     /* Allocate and initialize storage for cell vars, and copy free
        vars into frame.  This isn't too efficient right now. */
     if (PyTuple_GET_SIZE(co->co_cellvars)) {
@@ -3280,6 +3310,7 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
             }
         }
     }
+
     if (PyTuple_GET_SIZE(co->co_freevars)) {
         int i;
         for (i = 0; i < PyTuple_GET_SIZE(co->co_freevars); ++i) {
@@ -3302,6 +3333,7 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
         return PyGen_New(f);
     }
 
+    // （实际）执行当前调用栈场景
     retval = PyEval_EvalFrameEx(f,0);
 
 fail: /* Jump here from prelude on failure */
