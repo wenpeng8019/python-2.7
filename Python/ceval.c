@@ -689,20 +689,21 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 #ifdef DXPAIRS
     int lastopcode = 0;
 #endif
-    register PyObject **stack_pointer;  /* Next free slot in value stack */
-    register unsigned char *next_instr;
-    register int opcode;        /* Current opcode */
-    register int oparg;         /* Current opcode argument, if any */
-    register enum why_code why; /* Reason for block stack unwind */
-    register int err;           /* Error status -- nonzero if error */
-    register PyObject *x;       /* Result object -- NULL if error */
-    register PyObject *v;       /* Temporary objects popped off stack */
+    register PyObject **stack_pointer;  /* Next free slot in value stack（栈尾部指针，也就是栈定义） */
+    register unsigned char *next_instr; /* 当前（要执行的）指令的指针 */
+    register int opcode;                /* Current opcode（当前操作码） */
+    register int oparg;                 /* Current opcode argument, if any（当前操作码使用的参数，如果存在） */
+    register enum why_code why;         /* Reason for block stack unwind（栈中的块回撤原因） */
+    register int err;                   /* Error status -- nonzero if error（错误状态码） */
+    register PyObject *x;               /* Result object -- NULL if error（函数栈计算结果） */
+    register PyObject *v;               /* Temporary objects popped off stack（栈回撤） */
     register PyObject *w;
     register PyObject *u;
     register PyObject *t;
-    register PyObject *stream = NULL;    /* for PRINT opcodes */
-    register PyObject **fastlocals, **freevars;
-    PyObject *retval = NULL;            /* Return value */
+    register PyObject *stream = NULL;   /* for PRINT opcodes（用于 print 操作吗） */
+    register PyObject **fastlocals, /* 快速局部变量表 */  **freevars;
+    PyObject *retval = NULL;            /* Return value（返回值） */
+
     PyThreadState *tstate = PyThreadState_GET();
     PyCodeObject *co;
 
@@ -715,16 +716,15 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
        time it is tested. */
     int instr_ub = -1, instr_lb = 0, instr_prev = -1;
 
-    unsigned char *first_instr;
-    PyObject *names;
-    PyObject *consts;
+    unsigned char *first_instr;         /*（字节码）第一个指令的起始位置 */
+    PyObject *names;                    /* 代码命名对象表 */
+    PyObject *consts;                   /* 代码常量对象表 */
 #if defined(Py_DEBUG) || defined(LLTRACE)
     /* Make it easier to find out where we are with a debugger */
-    char *filename;
+    char *filename;                     /* 代码文件（名） */
 #endif
 
 /* Tuple access macros */
-
 #ifndef Py_DEBUG
 #define GETITEM(v, i) PyTuple_GET_ITEM((PyTupleObject *)(v), (i))
 #else
@@ -734,22 +734,30 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 #ifdef WITH_TSC
 /* Use Pentium timestamp counter to mark certain events:
    inst0 -- beginning of switch statement for opcode dispatch
+            操作码派发时刻
    inst1 -- end of switch statement (may be skipped)
+            操作码完成时刻
    loop0 -- the top of the mainloop
+            主过程循环开始时刻
    loop1 -- place where control returns again to top of mainloop
             (may be skipped)
+            主过程循环结束时刻
    intr1 -- beginning of long interruption
+            （长）中断开始时刻
    intr2 -- end of long interruption
+            （长）中断结束时刻
 
    Many opcodes call out to helper C functions.  In some cases, the
    time in those functions should be counted towards the time for the
    opcode, but not in all cases.  For example, a CALL_FUNCTION opcode
    calls another Python function; there's no point in charge all the
    bytecode executed by the called function to the caller.
+   有一些操作码都是直接调用的 C 处理过程的。
 
    It's hard to make a useful judgement statically.  In the presence
    of operator overloading, it's impossible to tell if a call will
    execute new Python code or not.
+   我们很难制定一个统计判定机制。
 
    It's a case-by-case judgement.  I'll use intr1 for the following
    cases:
@@ -774,18 +782,27 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 
 /* Code access macros */
 
+// 指令地址偏移量
 #define INSTR_OFFSET()  ((int)(next_instr - first_instr))
+// 读取并跳过当前指令操作码
 #define NEXTOP()        (*next_instr++)
+// 读取并跳过当前指令参数
 #define NEXTARG()       (next_instr += 2, (next_instr[-1]<<8) + next_instr[-2])
 #define PEEKARG()       ((next_instr[2]<<8) + next_instr[1])
+// 将指令指针直接设置到指定位置
 #define JUMPTO(x)       (next_instr = first_instr + (x))
 #define JUMPBY(x)       (next_instr += (x))
 
 /* OpCode prediction macros
+   操作码预测宏（运行时优化技术）
+
     Some opcodes tend to come in pairs thus making it possible to
     predict the second code when the first is run.  For example,
     GET_ITER is often followed by FOR_ITER. And FOR_ITER is often
     followed by STORE_FAST or UNPACK_SEQUENCE.
+    很多操作码都倾向于成对出现，因此当我们在运行这些操作码时，就可以预测下一个操作吗。
+    例如：`GET_ITER` 总是在 `FOR_ITER` 之后出现；而 `FOR_ITER` 又总是在
+    `STORE_FAST` 或 `UNPACK_SEQUENCE` 之后出现
 
     Verifying the prediction costs a single high-speed test of a register
     variable against a constant.  If the pairing was good, then the
@@ -812,26 +829,27 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 #define PREDICTED(op)           PRED_##op: next_instr++
 #define PREDICTED_WITH_ARG(op)  PRED_##op: oparg = PEEKARG(); next_instr += 3
 
-/* Stack manipulation macros */
+/* Stack manipulation macros（栈操作宏） */
 
 /* The stack can grow at most MAXINT deep, as co_nlocals and
    co_stacksize are ints. */
-#define STACK_LEVEL()     ((int)(stack_pointer - f->f_valuestack))
-#define EMPTY()           (STACK_LEVEL() == 0)
-#define TOP()             (stack_pointer[-1])
-#define SECOND()          (stack_pointer[-2])
-#define THIRD()           (stack_pointer[-3])
-#define FOURTH()          (stack_pointer[-4])
-#define PEEK(n)           (stack_pointer[-(n)])
-#define SET_TOP(v)        (stack_pointer[-1] = (v))
-#define SET_SECOND(v)     (stack_pointer[-2] = (v))
-#define SET_THIRD(v)      (stack_pointer[-3] = (v))
-#define SET_FOURTH(v)     (stack_pointer[-4] = (v))
-#define SET_VALUE(n, v)   (stack_pointer[-(n)] = (v))
-#define BASIC_STACKADJ(n) (stack_pointer += n)
-#define BASIC_PUSH(v)     (*stack_pointer++ = (v))
-#define BASIC_POP()       (*--stack_pointer)
+#define STACK_LEVEL()     ((int)(stack_pointer - f->f_valuestack))  /* 栈中数据的大小 */
+#define EMPTY()           (STACK_LEVEL() == 0)                      /* 栈是否为空 */
+#define TOP()             (stack_pointer[-1])                       /* 查看栈中（反向）第1个数据 */
+#define SECOND()          (stack_pointer[-2])                       /* 查看栈中（反向）第2个数据 */
+#define THIRD()           (stack_pointer[-3])                       /* 查看栈中（反向）第3个数据 */
+#define FOURTH()          (stack_pointer[-4])                       /* 查看栈中（反向）第4个数据 */
+#define PEEK(n)           (stack_pointer[-(n)])                     /* 查看栈中（反向）第 n 个数据，索引从 1 开始 */
+#define SET_TOP(v)        (stack_pointer[-1] = (v))                 /* 设置栈中（反向）第1个数据 */
+#define SET_SECOND(v)     (stack_pointer[-2] = (v))                 /* 设置栈中（反向）第2个数据 */
+#define SET_THIRD(v)      (stack_pointer[-3] = (v))                 /* 设置栈中（反向）第3个数据 */
+#define SET_FOURTH(v)     (stack_pointer[-4] = (v))                 /* 设置栈中（反向）第4个数据 */
+#define SET_VALUE(n, v)   (stack_pointer[-(n)] = (v))               /* 设置栈中（反向）第 n 个数据，索引从 1 开始 */
+#define BASIC_STACKADJ(n) (stack_pointer += n)                      /* 栈增加 n 个数据，直接修改栈指针 +n */
+#define BASIC_PUSH(v)     (*stack_pointer++ = (v))                  /* 将数据 v 压栈 */
+#define BASIC_POP()       (*--stack_pointer)                        /* 从栈中弹出一个数据 */
 
+// 基于调整宏选项的 PUSH、POP、STACKADJ 和（扩展的）POP 操作
 #ifdef LLTRACE
 #define PUSH(v)         { (void)(BASIC_PUSH(v), \
                           lltrace && prtrace(TOP(), "push")); \
@@ -851,8 +869,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 #define EXT_POP(STACK_POINTER) (*--(STACK_POINTER))
 #endif
 
-/* Local variable macros */
-
+/* Local variable macros（读取局部变量） */
 #define GETLOCAL(i)     (fastlocals[i])
 
 /* The SETLOCAL() macro must not DECREF the local variable in-place and
@@ -861,21 +878,25 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
    This is because it is possible that during the DECREF the frame is
    accessed by other code (e.g. a __del__ method or gc.collect()) and the
    variable would be pointing to already-freed memory. */
+// 读取并设置（交换访问）局部变量
 #define SETLOCAL(i, value)      do { PyObject *tmp = GETLOCAL(i); \
                                      GETLOCAL(i) = value; \
                                      Py_XDECREF(tmp); } while (0)
 
-/* Start of code */
+/* Start of code（开始执行指令） */
 
+    // 当前调用栈场景（frame）为空，直接返回
     if (f == NULL)
         return NULL;
 
-    /* push frame */
+    /* push frame（当前场景压栈） */
     if (Py_EnterRecursiveCall(""))
         return NULL;
 
+    // 记录当前调用栈场景（frame）
     tstate->frame = f;
 
+    // 处理 trace 机制
     if (tstate->use_tracing) {
         if (tstate->c_tracefunc != NULL) {
             /* tstate->c_tracefunc, if defined, is a
@@ -910,12 +931,14 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         }
     }
 
+    // 初始化当前场景的字节（机器）码指令集、命名表、常量对象表、局部变量表、以及指令入口地址
     co = f->f_code;
     names = co->co_names;
     consts = co->co_consts;
     fastlocals = f->f_localsplus;
     freevars = f->f_localsplus + co->co_nlocals;
     first_instr = (unsigned char*) PyString_AS_STRING(co->co_code);
+
     /* An explanation is in order for the next line.
 
        f->f_lasti now refers to the index of the last instruction
@@ -933,10 +956,16 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
        FOR_ITER is effectively a single opcode and f->f_lasti will point
        at to the beginning of the combined pair.)
     */
-    next_instr = first_instr + f->f_lasti + 1;
-    stack_pointer = f->f_stacktop;
+    next_instr = first_instr + f->f_lasti + 1;  // 初始化第一个要执行的指令
+    stack_pointer = f->f_stacktop;              // 初始化调用栈对象
     assert(stack_pointer != NULL);
-    f->f_stacktop = NULL;       /* remains NULL unless yield suspends frame */
+    f->f_stacktop = NULL;                       /* remains NULL unless yield suspends frame
+                                                   该变量是否为 NULL 用于标记，
+                                                   当前调用栈场景（frame），在此次执行完成回撤时，是否需要出栈销毁
+                                                   对于普通同步调用场景，栈场景的回撤默认就是出栈并销毁的
+                                                   但 Python 支持 yield 机制。即以 yield 机制完成返回时，
+                                                   栈场景的回撤，并不会销毁场景，而是将场景挂起。
+                                                */
 
 #ifdef LLTRACE
     lltrace = PyDict_GetItemString(f->f_globals, "__lltrace__") != NULL;
@@ -955,7 +984,12 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         goto on_error;
     }
 
+    // 指令循环
+
     for (;;) {
+
+        // 统计、验证
+
 #ifdef WITH_TSC
         if (inst1 == 0) {
             /* Almost surely, the opcode executed a break
@@ -1033,13 +1067,17 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 }
             }
 #endif
-        }
+        } // if (--_Py_Ticker < 0)
 
+    // 快速入口 1: 读取下一个（指令）操作码
     fast_next_opcode:
+
+        // 记录此刻指令地址（绝对）偏移量
         f->f_lasti = INSTR_OFFSET();
 
         /* line-by-line tracing support */
 
+        // 执行 trace 机制
         if (_Py_TracingPossible &&
             tstate->c_tracefunc != NULL && !tstate->tracing) {
             /* see maybe_call_line_trace
@@ -1064,12 +1102,16 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 
         /* Extract opcode and argument */
 
+        // 读取当前指令操作码和参数
         opcode = NEXTOP();
         oparg = 0;   /* allows oparg to be stored in a register because
             it doesn't have to be remembered across a full loop */
         if (HAS_ARG(opcode))
             oparg = NEXTARG();
+
+    // 快速入口 2: 无需读取下一个（指令）操作码，（重新）派发执行操作码
     dispatch_opcode:
+
 #ifdef DYNAMIC_EXECUTION_PROFILE
 #ifdef DXPAIRS
         dxpairs[lastopcode][opcode]++;
@@ -1096,8 +1138,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         /* Main switch on opcode */
         READ_TIMESTAMP(inst0);
 
-        /// 派发执行操作码（opcode）
-
+        // 派发操作码（opcode）
         switch (opcode) {
 
         /* BEWARE!
@@ -2876,6 +2917,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         /* Unwind stacks if a (pseudo) exception occurred */
 
 fast_block_end:
+
         while (why != WHY_NOT && f->f_iblock > 0) {
             /* Peek at the current block. */
             PyTryBlock *b = &f->f_blockstack[f->f_iblock - 1];
@@ -2941,7 +2983,7 @@ fast_block_end:
                 JUMPTO(b->b_handler);
                 break;
             }
-        } /* unwind stack */
+        } /* while (why != WHY_NOT && f->f_iblock > 0)  unwind stack */
 
         /* End the loop if we still have an error (or return) */
 
@@ -2951,8 +2993,12 @@ fast_block_end:
 
     } /* main loop */
 
+    // 调用栈场景（frame）完成回撤（非 yield 状态）
+
     assert(why != WHY_YIELD);
+
     /* Pop remaining stack entries. */
+    // 清空栈中引用的对象
     while (!EMPTY()) {
         v = POP();
         Py_XDECREF(v);
@@ -3003,6 +3049,7 @@ fast_yield:
 
     /* pop frame */
 exit_eval_frame:
+    // 调用栈场景（frame）回撤出栈
     Py_LeaveRecursiveCall();
     tstate->frame = f->f_back;
 
