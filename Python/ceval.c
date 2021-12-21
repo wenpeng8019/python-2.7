@@ -4130,8 +4130,11 @@ call_function(PyObject ***pp_stack, int oparg
         } else
             Py_INCREF(func);
         READ_TIMESTAMP(*pintr0);
+
+        // 如果该函数对象是由 Python 语言定义的
         if (PyFunction_Check(func))
             x = fast_function(func, pp_stack, n, na, nk);
+        // 如果是由 C 语言定义的 builtin 函数对象
         else
             x = do_call(func, pp_stack, na, nk);
         READ_TIMESTAMP(*pintr1);
