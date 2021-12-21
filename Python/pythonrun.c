@@ -866,6 +866,8 @@ PyRun_InteractiveOneFlags(FILE *fp, const char *filename, PyCompilerFlags *flags
         PyErr_Print();
         return -1;
     }
+
+    
     m = PyImport_AddModule("__main__");
     if (m == NULL) {
         PyArena_Free(arena);
@@ -932,24 +934,36 @@ PyRun_SimpleFileExFlags(FILE *fp, const char *filename, int closeit,
     const char *ext;
     int set_file_name = 0, ret, len;
 
+    // 获取 `__main__` 模块对象
     m = PyImport_AddModule("__main__");
     if (m == NULL)
         return -1;
+
+    // 获取 `__main__` 模块对象的 dict 对象
     d = PyModule_GetDict(m);
+
+    // 在 `__main__` 模块域命名空间中，添加 `__file__` 成员
     if (PyDict_GetItemString(d, "__file__") == NULL) {
+
         PyObject *f = PyString_FromString(filename);
         if (f == NULL)
             return -1;
+
         if (PyDict_SetItemString(d, "__file__", f) < 0) {
             Py_DECREF(f);
             return -1;
         }
+
         set_file_name = 1;
         Py_DECREF(f);
     }
+    
     len = strlen(filename);
     ext = filename + len - (len > 4 ? 4 : 0);
+
+    // 如果直接运行的是编译后（缓存）的字节码文件
     if (maybe_pyc_file(fp, filename, ext, closeit)) {
+
         /* Try to run a pyc file. First, re-open in binary */
         if (closeit)
             fclose(fp);
@@ -958,11 +972,17 @@ PyRun_SimpleFileExFlags(FILE *fp, const char *filename, int closeit,
             ret = -1;
             goto done;
         }
+
         /* Turn on optimization if a .pyo file is given */
         if (strcmp(ext, ".pyo") == 0)
             Py_OptimizeFlag = 1;
+
+        // 以 `__main__` 模块对象的 dict 对象，作为初始 globals 和 locals 域来运行 Python pyc file
         v = run_pyc_file(fp, filename, d, d, flags);
+
     } else {
+
+        // 以 `__main__` 模块对象的 dict 对象，作为初始 globals 和 locals 域来运行 Python file
         v = PyRun_FileExFlags(fp, filename, Py_file_input, d, d,
                               closeit, flags);
     }
@@ -972,8 +992,10 @@ PyRun_SimpleFileExFlags(FILE *fp, const char *filename, int closeit,
         goto done;
     }
     Py_DECREF(v);
+
     if (Py_FlushLine())
         PyErr_Clear();
+
     ret = 0;
   done:
     if (set_file_name && PyDict_DelItemString(d, "__file__"))
@@ -985,18 +1007,26 @@ int
 PyRun_SimpleStringFlags(const char *command, PyCompilerFlags *flags)
 {
     PyObject *m, *d, *v;
+
+    // 获取 `__main__` 模块对象
     m = PyImport_AddModule("__main__");
     if (m == NULL)
         return -1;
+
+    // 获取 `__main__` 模块对象的 dict 对象
     d = PyModule_GetDict(m);
+
+    // 以 `__main__` 模块对象的 dict 对象，作为初始 globals 和 locals 域来运行 Python command
     v = PyRun_StringFlags(command, Py_file_input, d, d, flags);
     if (v == NULL) {
         PyErr_Print();
         return -1;
     }
     Py_DECREF(v);
+
     if (Py_FlushLine())
         PyErr_Clear();
+
     return 0;
 }
 
