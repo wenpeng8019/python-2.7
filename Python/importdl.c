@@ -20,7 +20,9 @@ extern dl_funcptr _PyImport_GetDynLoadFunc(const char *name,
 
 PyObject *
 _PyImport_LoadDynamicModule(char *name, char *pathname, FILE *fp)
-{
+{   // @ extern
+    // @ load_module
+
     PyObject *m;
     char *lastdot, *shortname, *packagecontext, *oldcontext;
     dl_funcptr p;

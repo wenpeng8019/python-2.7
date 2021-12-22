@@ -117,9 +117,12 @@ static const struct filedescr _PyImport_StandardFiletab[] = {
 
 /* Initialize things */
 
+// 初始化 import 机制
 void
 _PyImport_Init(void)
-{
+{   // @ extern
+    // @ Py_InitializeEx
+
     const struct filedescr *scan;
     struct filedescr *filetab;
     int countD = 0;
@@ -128,6 +131,7 @@ _PyImport_Init(void)
     /* prepare _PyImport_Filetab: copy entries from
        _PyImport_DynLoadFiletab and _PyImport_StandardFiletab.
      */
+
      // 获取动态库的数量
 #ifdef HAVE_DYNAMIC_LOADING
     for (scan = _PyImport_DynLoadFiletab; scan->suffix != NULL; ++scan)
@@ -138,10 +142,12 @@ _PyImport_Init(void)
     for (scan = _PyImport_StandardFiletab; scan->suffix != NULL; ++scan)
         ++countS;
 
+    // 创建导入库表
     filetab = PyMem_NEW(struct filedescr, countD + countS + 1);
     if (filetab == NULL)
         Py_FatalError("Can't initialize import file table.");
 
+    // 加载（标准、动态）库到导入库表
 #ifdef HAVE_DYNAMIC_LOADING
     memcpy(filetab, _PyImport_DynLoadFiletab,
            countD * sizeof(struct filedescr));
@@ -150,8 +156,10 @@ _PyImport_Init(void)
            countS * sizeof(struct filedescr));
     filetab[countD + countS].suffix = NULL;
 
+    // 设置到全局导入库表
     _PyImport_Filetab = filetab;
 
+    // 根据选项，设置导入库表
     if (Py_OptimizeFlag) {
 
         /* Replace ".pyc" with ".pyo" in _PyImport_Filetab */
@@ -176,7 +184,10 @@ _PyImport_Init(void)
 
 void
 _PyImportHooks_Init(void)
-{
+{   // @ extern
+    // @ Py_InitializeEx
+    // @ Py_NewInterpreter
+
     PyObject *v, *path_hooks = NULL, *zimpimport;
     int err = 0;
 
@@ -256,6 +267,7 @@ _PyImport_Fini(void)
     _PyImport_Filetab = NULL;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
 /* Locking primitives to prevent parallel imports of the same module
    in different threads to return with a partially loaded module.
@@ -360,6 +372,8 @@ imp_release_lock(PyObject *self, PyObject *noargs)
     return Py_None;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 static void
 imp_modules_reloading_clear(void)
 {
@@ -403,7 +417,10 @@ static char* sys_files[] = {
 
 void
 PyImport_Cleanup(void)
-{
+{   // @ extern
+    // @ Py_Finalize
+    // @ Py_EndInterpreter
+
     Py_ssize_t pos, ndone;
     char *name;
     PyObject *key, *value, *dict;
@@ -541,6 +558,7 @@ PyImport_GetMagicNumber(void)
     return pyc_magic;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
 /* Magic for extension modules (built-in as well as dynamically
    loaded).  To prevent initializing an extension module more than
@@ -554,7 +572,12 @@ PyImport_GetMagicNumber(void)
 
 PyObject *
 _PyImport_FixupExtension(char *name, char *filename)
-{
+{   // @ extern
+    // @ init_builtin
+    // @ Py_InitializeEx（包括：`sys`、`__builtin__`、`exceptions` 3个模块）
+    // @ PyOS_InitInterrupts（包括：`signal` 1个模块）
+    // @ _PyImport_LoadDynamicModule
+
     PyObject *modules, *mod, *dict, *copy;
     if (extensions == NULL) {
         extensions = PyDict_New();
@@ -602,6 +625,7 @@ _PyImport_FindExtension(char *name, char *filename)
     return mod;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
 /* Get the module object corresponding to a module name.
    First check the modules dictionary if there's one there,
@@ -609,6 +633,7 @@ _PyImport_FindExtension(char *name, char *filename)
    Because the former action is most common, THIS DOES NOT RETURN A
    'NEW' REFERENCE! */
 
+// 获得一个 module 对象（不存在则自动创建）
 PyObject *
 PyImport_AddModule(const char *name)
 {
@@ -642,6 +667,8 @@ remove_module(const char *name)
                       "sys.modules failed");
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 /* Execute a code object in a module and return the module object
  * WITH INCREMENTED REFERENCE COUNT.  If an error occurs, name is
  * removed from sys.modules, to avoid leaving damaged module objects
@@ -649,6 +676,14 @@ remove_module(const char *name)
  * module object (if any) in this case; PyImport_ReloadModule is an
  * example.
  */
+
+// 执行一个 module 对象
+// + module 对象自身，就类似于一个无名、无参、无返回值的处理过程。
+//   module 下函数、类、变量的定义，本质就是执行 module 这个过程的操作结果
+//   同样，在 module 的根域下，也可以添加任何逻辑及其语句代码
+//   这些代码会在模块导入时，自动执行。
+//   这是动态脚本语言常有的特性，例如：js
+
 PyObject *
 PyImport_ExecCodeModule(char *name, PyObject *co)
 {
@@ -657,22 +692,37 @@ PyImport_ExecCodeModule(char *name, PyObject *co)
 
 PyObject *
 PyImport_ExecCodeModuleEx(char *name, PyObject *co, char *pathname)
-{
+{   // @ extern
+    // @ PyImport_ExecCodeModule
+    // @ PyImport_ImportFrozenModule
+    // @ load_source_module
+    // @ load_compiled_module
+    // @ zipimporter_load_module
+
+
     PyObject *modules = PyImport_GetModuleDict();
     PyObject *m, *d, *v;
 
+    // 获得模块对象
     m = PyImport_AddModule(name);
     if (m == NULL)
         return NULL;
+
     /* If the module is being reloaded, we get the old module back
        and re-use its dict to exec the new code. */
+
+    // 获取模块对象的命名空间 dict
     d = PyModule_GetDict(m);
+
+    // 确保（默认的）__builtins__ 属性
     if (PyDict_GetItemString(d, "__builtins__") == NULL) {
         if (PyDict_SetItemString(d, "__builtins__",
                                  PyEval_GetBuiltins()) != 0)
             goto error;
     }
+    
     /* Remember the filename as the __file__ attribute */
+    // 确保（默认的）__file__ 属性
     v = NULL;
     if (pathname != NULL) {
         v = PyString_FromString(pathname);
@@ -687,11 +737,13 @@ PyImport_ExecCodeModuleEx(char *name, PyObject *co, char *pathname)
         PyErr_Clear(); /* Not important enough to report */
     Py_DECREF(v);
 
+    // 以模块对象的 dict 对象，作为初始 globals 和 locals 域来运行模块的（字节码）代码
     v = PyEval_EvalCode((PyCodeObject *)co, d, d);
     if (v == NULL)
         goto error;
     Py_DECREF(v);
 
+    // 验证导入成功
     if ((m = PyDict_GetItemString(modules, name)) == NULL) {
         PyErr_Format(PyExc_ImportError,
                      "Loaded module %.200s not found in sys.modules",
@@ -700,7 +752,6 @@ PyImport_ExecCodeModuleEx(char *name, PyObject *co, char *pathname)
     }
 
     Py_INCREF(m);
-
     return m;
 
   error:
@@ -708,6 +759,7 @@ PyImport_ExecCodeModuleEx(char *name, PyObject *co, char *pathname)
     return NULL;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
 /* Given a pathname for a Python source file, fill a buffer with the
    pathname for the corresponding compiled file.  Return the pathname
@@ -797,7 +849,8 @@ read_compiled_module(char *cpathname, FILE *fp)
 
 static PyObject *
 load_compiled_module(char *name, char *cpathname, FILE *fp)
-{
+{   // load_module
+
     long magic;
     PyCodeObject *co;
     PyObject *m;
@@ -820,6 +873,8 @@ load_compiled_module(char *name, char *cpathname, FILE *fp)
 
     return m;
 }
+
+///////////////////////////////////////////////////////////////////////////////
 
 /* Parse a source file and return the corresponding code object */
 
@@ -974,7 +1029,8 @@ update_compiled_module(PyCodeObject *co, char *pathname)
 
 static PyObject *
 load_source_module(char *name, char *pathname, FILE *fp)
-{
+{   // @ load_module
+
     struct stat st;
     FILE *fpc;
     char buf[MAXPATHLEN+1];
@@ -1030,6 +1086,7 @@ load_source_module(char *name, char *pathname, FILE *fp)
     return m;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
 /* Forward */
 static PyObject *load_module(char *, FILE *, char *, int, PyObject *);
@@ -1040,9 +1097,11 @@ static struct _frozen *find_frozen(char *name);
 /* Load a package and return its module object WITH INCREMENTED
    REFERENCE COUNT */
 
+// 加载并导入一个包
 static PyObject *
 load_package(char *name, char *pathname)
-{
+{   // load_module
+
     PyObject *m, *d;
     PyObject *file = NULL;
     PyObject *path = NULL;
@@ -1092,7 +1151,6 @@ load_package(char *name, char *pathname)
     Py_XDECREF(file);
     return m;
 }
-
 
 /* Helper to test for built-in module */
 
@@ -1190,6 +1248,10 @@ PyImport_GetImporter(PyObject *path) {
     return importer;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// 查找定位一个模块
+///////////////////////////////////////////////////////////////////////////////
+
 /* Search the path (default sys.path) for a module.  Return the
    corresponding filedescr struct, and (via return arguments) the
    pathname and an open file.  Return NULL if the module is not found. */
@@ -1203,10 +1265,16 @@ static int case_ok(char *, Py_ssize_t, Py_ssize_t, char *);
 static int find_init_module(char *); /* Forward */
 static struct filedescr importhookdescr = {"", "", IMP_HOOK};
 
+// 查找一个指定的模块
 static struct filedescr *
 find_module(char *fullname, char *subname, PyObject *path, char *buf,
             size_t buflen, FILE **p_fp, PyObject **p_loader)
-{
+{   // @ _PyImport_FindModule
+    // @ load_package
+    // @ import_submodule
+    // @ PyImport_ReloadModule
+    // @ call_find_module
+
     Py_ssize_t i, npath;
     size_t len, namelen;
     struct filedescr *fdp = NULL;
@@ -1585,7 +1653,9 @@ PyAPI_FUNC(int) _PyImport_IsScript(struct filedescr * fd)
 
 static int
 case_ok(char *buf, Py_ssize_t len, Py_ssize_t namelen, char *name)
-{
+{   // @ find_module
+    // @ find_init_module
+
 /* Pick a platform-specific implementation; the sequence of #if's here should
  * match the sequence just above.
  */
@@ -1720,10 +1790,12 @@ case_ok(char *buf, Py_ssize_t len, Py_ssize_t namelen, char *name)
 
 
 #ifdef HAVE_STAT
+
 /* Helper to look for __init__.py or __init__.py[co] in potential package */
 static int
 find_init_module(char *buf)
-{
+{   // @ find_module
+
     const size_t save_len = strlen(buf);
     size_t i = save_len;
     char *pname;  /* pointer to start of __init__ */
@@ -1772,7 +1844,8 @@ find_init_module(char *buf)
 static int
 find_init_module(buf)
     char *buf;
-{
+{   // @ find_module
+
     int save_len = strlen(buf);
     int i = save_len;
 
@@ -1800,12 +1873,16 @@ find_init_module(buf)
 
 #endif /* HAVE_STAT */
 
+///////////////////////////////////////////////////////////////////////////////
+// 加载并导入（所有类型）模块的功能集成入口
+///////////////////////////////////////////////////////////////////////////////
 
 static int init_builtin(char *); /* Forward */
 
 /* Load an external module using the default search path and return
    its module object WITH INCREMENTED REFERENCE COUNT */
 
+// 查找、加载并导入一个模块
 static PyObject *
 load_module(char *name, FILE *fp, char *pathname, int type, PyObject *loader)
 {
@@ -1814,6 +1891,7 @@ load_module(char *name, FILE *fp, char *pathname, int type, PyObject *loader)
     int err;
 
     /* First check that there's an open file (if we need one)  */
+    // 验证对于 .py 和 .pyc 类型的模块，必须存在其对应 FILE 操作句柄
     switch (type) {
     case PY_SOURCE:
     case PY_COMPILED:
@@ -1827,30 +1905,41 @@ load_module(char *name, FILE *fp, char *pathname, int type, PyObject *loader)
 
     switch (type) {
 
+    // 对于 .py（源码类型）模块
     case PY_SOURCE:
         m = load_source_module(name, pathname, fp);
         break;
 
+    // 对于 .pyc（编译后的字节码类型）模块
     case PY_COMPILED:
         m = load_compiled_module(name, pathname, fp);
         break;
 
 #ifdef HAVE_DYNAMIC_LOADING
+    // 对于 .dll/.so（动态库类型）模块
     case C_EXTENSION:
         m = _PyImport_LoadDynamicModule(name, pathname, fp);
         break;
 #endif
 
+    // 对于文件目录（包类型）模块
     case PKG_DIRECTORY:
         m = load_package(name, pathname);
         break;
 
+    // 对于 builtin 类型和 frozen 类型的模块
+    // + 二者具有相同的处理逻辑
     case C_BUILTIN:
     case PY_FROZEN:
+
+        // 默认以文件名作为模块命名
         if (pathname != NULL && pathname[0] != '\0')
             name = pathname;
+        
+        // 对于 builtin 类型的模块
         if (type == C_BUILTIN)
             err = init_builtin(name);
+        // 对于 frozen 类型的模块
         else
             err = PyImport_ImportFrozenModule(name);
         if (err < 0)
@@ -1863,6 +1952,8 @@ load_module(char *name, FILE *fp, char *pathname, int type, PyObject *loader)
                          name);
             return NULL;
         }
+
+        // 判定模块是否成功导入
         modules = PyImport_GetModuleDict();
         m = PyDict_GetItemString(modules, name);
         if (m == NULL) {
@@ -1875,14 +1966,19 @@ load_module(char *name, FILE *fp, char *pathname, int type, PyObject *loader)
             return NULL;
         }
         Py_INCREF(m);
+
         break;
 
+    // 对于自定义（Hook）导入接口
     case IMP_HOOK: {
+
         if (loader == NULL) {
             PyErr_SetString(PyExc_ImportError,
                             "import hook without loader");
             return NULL;
         }
+
+        // 执行（Hook）接口代码
         m = PyObject_CallMethod(loader, "load_module", "s", name);
         break;
     }
@@ -1898,19 +1994,25 @@ load_module(char *name, FILE *fp, char *pathname, int type, PyObject *loader)
     return m;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
 /* Initialize a built-in module.
    Return 1 for success, 0 if the module is not found, and -1 with
    an exception set if the initialization failed. */
 
+// 初始化（导入）一个 builtin 类型模块
 static int
 init_builtin(char *name)
-{
+{   // @ load_module
+    // @ imp_init_builtin
+
     struct _inittab *p;
 
+    // 之前已经初始化（导入）过，直接返回
     if (_PyImport_FindExtension(name, name) != NULL)
         return 1;
 
+    // 查找指定的 builtin 模块
     for (p = PyImport_Inittab; p->name != NULL; p++) {
         if (strcmp(name, p->name) == 0) {
             if (p->initfunc == NULL) {
@@ -1919,27 +2021,39 @@ init_builtin(char *name)
                     name);
                 return -1;
             }
+
+            // 执行模块的 init 接口处理
             if (Py_VerboseFlag)
                 PySys_WriteStderr("import %s # builtin\n", name);
             (*p->initfunc)();
             if (PyErr_Occurred())
                 return -1;
+
+            // 添加到 fixup extension 缓存
             if (_PyImport_FixupExtension(name, name) == NULL)
                 return -1;
+
             return 1;
         }
     }
     return 0;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
 /* Frozen modules */
 
+// 查找（而非导入）预定义的 frozen 类型模块
 static struct _frozen *
 find_frozen(char *name)
-{
+{   // @ imp_is_frozen
+    // @ get_frozen_object
+    // @ find_module
+    // @ PyImport_ImportFrozenModule
+
     struct _frozen *p;
 
+    // 在预定义的 frozen 模块集合中查找
     for (p = PyImport_FrozenModules; ; p++) {
         if (p->name == NULL)
             return NULL;
@@ -1949,12 +2063,14 @@ find_frozen(char *name)
     return p;
 }
 
+// 加载（而非导入）预定义的 frozen 类型模块
 static PyObject *
 get_frozen_object(char *name)
-{
+{   // @ imp_get_frozen_object
+
+    // 查找指定的 frozen 模块
     struct _frozen *p = find_frozen(name);
     int size;
-
     if (p == NULL) {
         PyErr_Format(PyExc_ImportError,
                      "No such frozen object named %.200s",
@@ -1967,9 +2083,13 @@ get_frozen_object(char *name)
                      name);
         return NULL;
     }
+
+    // 修正 size 属性（负数表示模块是包类型）
     size = p->size;
     if (size < 0)
         size = -size;
+
+    // 读取并解析 module 对象
     return PyMarshal_ReadObjectFromString((char *)p->code, size);
 }
 
@@ -1978,9 +2098,15 @@ get_frozen_object(char *name)
    an exception set if the initialization failed.
    This function is also used from frozenmain.c */
 
+// 初始导入一个 frozen 类型模块
 int
 PyImport_ImportFrozenModule(char *name)
-{
+{   // @ extern
+    // @ load_module
+    // @ imp_init_frozen
+    // @ Py_FrozenMain
+
+    // 查找指定的 frozen 模块
     struct _frozen *p = find_frozen(name);
     PyObject *co;
     PyObject *m;
@@ -1995,13 +2121,17 @@ PyImport_ImportFrozenModule(char *name)
                      name);
         return -1;
     }
+
     size = p->size;
     ispackage = (size < 0);
     if (ispackage)
         size = -size;
+
     if (Py_VerboseFlag)
         PySys_WriteStderr("import %s # frozen%s\n",
             name, ispackage ? " package" : "");
+
+    // 读取并解析 module 对象
     co = PyMarshal_ReadObjectFromString((char *)p->code, size);
     if (co == NULL)
         return -1;
@@ -2011,25 +2141,34 @@ PyImport_ImportFrozenModule(char *name)
                      name);
         goto err_return;
     }
+
+    // 对于包类型
     if (ispackage) {
         /* Set __path__ to the package name */
         PyObject *d, *s;
         int err;
+
         m = PyImport_AddModule(name);
         if (m == NULL)
             goto err_return;
+
+        // 初始化（包）模块命名空间中的 `__path__` 属性
         d = PyModule_GetDict(m);
         s = PyString_InternFromString(name);
         if (s == NULL)
             goto err_return;
         err = PyDict_SetItemString(d, "__path__", s);
+
         Py_DECREF(s);
         if (err != 0)
             goto err_return;
     }
+
+    // 执行模块（自身根域）代码
     m = PyImport_ExecCodeModuleEx(name, co, "<frozen>");
     if (m == NULL)
         goto err_return;
+
     Py_DECREF(co);
     Py_DECREF(m);
     return 1;
@@ -2038,10 +2177,11 @@ err_return:
     return -1;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
 /* Import a module, either built-in, frozen, or external, and return
    its module object WITH INCREMENTED REFERENCE COUNT */
-
+// 导入一个（由 Python 语言编写的）普通类型模块
 PyObject *
 PyImport_ImportModule(const char *name)
 {
@@ -2064,6 +2204,9 @@ PyImport_ImportModule(const char *name)
  * ImportError instead of blocking.
  *
  * Returns the module object with incremented ref count.
+ * 
+ * 以非阻塞的方式，试着导入一个普通类型模块。
+ * + 也就是只有当导入锁未被锁定时，才执行导入处理。否则直接返回失败
  */
 PyObject *
 PyImport_ImportModuleNoBlock(const char *name)
@@ -2075,10 +2218,11 @@ PyImport_ImportModuleNoBlock(const char *name)
 #endif
 
     /* Try to get the module from sys.modules[name] */
+    // 从 sys.modules 中直接获取指定模块（如果存在）
+
     modules = PyImport_GetModuleDict();
     if (modules == NULL)
         return NULL;
-
     result = PyDict_GetItemString(modules, name);
     if (result != NULL) {
         Py_INCREF(result);
@@ -2087,7 +2231,10 @@ PyImport_ImportModuleNoBlock(const char *name)
     else {
         PyErr_Clear();
     }
+
 #ifdef WITH_THREAD
+    // 对于多线程版本
+
     /* check the import lock
      * me might be -1 but I ignore the error here, the lock function
      * takes care of the problem */
@@ -2103,10 +2250,13 @@ PyImport_ImportModuleNoBlock(const char *name)
                      name);
         return NULL;
     }
+
 #else
     return PyImport_ImportModule(name);
 #endif
 }
+
+//-----------------------------------------------------------------------------
 
 /* Forward declarations for helper routines */
 static PyObject *get_parent(PyObject *globals, char *buf,
@@ -2120,10 +2270,13 @@ static PyObject * import_submodule(PyObject *mod, char *name, char *fullname);
 
 /* The Magnum Opus of dotted-name import :-) */
 
+// 模块导入的实际处理
+// + 该处理不考虑加锁逻辑，单纯的实现模块的导入逻辑
 static PyObject *
 import_module_level(char *name, PyObject *globals, PyObject *locals,
                     PyObject *fromlist, int level)
-{
+{   // @ PyImport_ImportModuleLevel
+
     char buf[MAXPATHLEN+1];
     Py_ssize_t buflen = 0;
     PyObject *parent, *head, *next, *tail;
@@ -2188,10 +2341,14 @@ import_module_level(char *name, PyObject *globals, PyObject *locals,
     return tail;
 }
 
+// 基于线程安全（加锁）版本的模块导入处理
 PyObject *
 PyImport_ImportModuleLevel(char *name, PyObject *globals, PyObject *locals,
                          PyObject *fromlist, int level)
-{
+{   // @ extern
+    // @ PyImport_Import
+    // @ builtin___import__
+
     PyObject *result;
     _PyImport_AcquireLock();
     result = import_module_level(name, globals, locals, fromlist, level);
@@ -2614,13 +2771,22 @@ import_submodule(PyObject *mod, char *subname, char *fullname)
     return m;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// 查找、加载并导入模块的集成入口（结束）
+///////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////
+// 对外暴露的接口
+///////////////////////////////////////////////////////////////////////////////
 
 /* Re-import a module of any kind and return its module object, WITH
    INCREMENTED REFERENCE COUNT */
-
+// 重新加载一个模块
 PyObject *
 PyImport_ReloadModule(PyObject *m)
-{
+{   // @ extern
+    // @ imp_reload
+
     PyInterpreterState *interp = PyThreadState_Get()->interp;
     PyObject *modules_reloading = interp->modules_reloading;
     PyObject *modules = PyImport_GetModuleDict();
@@ -2722,10 +2888,12 @@ PyImport_ReloadModule(PyObject *m)
    A dummy list ["__doc__"] is passed as the 4th argument so that
    e.g. PyImport_Import(PyString_FromString("win32com.client.gencache"))
    will return <module "gencache"> instead of <module "win32com">. */
-
+// 采用和 Python 语言环境（import 关键字）等同的方式，导入一个模块
 PyObject *
 PyImport_Import(PyObject *module_name)
-{
+{   // @ extern
+    // @ PyImport_ImportModule
+
     static PyObject *silly_list = NULL;
     static PyObject *builtins_str = NULL;
     static PyObject *import_str = NULL;
@@ -2735,6 +2903,7 @@ PyImport_Import(PyObject *module_name)
     PyObject *r = NULL;
 
     /* Initialize constant string objects */
+    // 初始化几个字符串静态常量
     if (silly_list == NULL) {
         import_str = PyString_InternFromString("__import__");
         if (import_str == NULL)
@@ -2748,6 +2917,7 @@ PyImport_Import(PyObject *module_name)
     }
 
     /* Get the builtins from current globals */
+    // 从当前的 globals 中获得 `builtins` 对象
     globals = PyEval_GetGlobals();
     if (globals != NULL) {
         Py_INCREF(globals);
@@ -2756,17 +2926,24 @@ PyImport_Import(PyObject *module_name)
             goto err;
     }
     else {
+
         /* No globals -- use standard builtins, and fake globals */
+        // 如果不存在 globals 对象，则使用默认标准的 `builtins` 模块对象，
+        // 以及创建一个伪 globals 对象
+
         builtins = PyImport_ImportModuleLevel("__builtin__",
                                               NULL, NULL, NULL, 0);
         if (builtins == NULL)
             return NULL;
+
         globals = Py_BuildValue("{OO}", builtins_str, builtins);
         if (globals == NULL)
             goto err;
     }
 
     /* Get the __import__ function from the builtins */
+    // 从 `builtins` 对象中，获取 `__import__` 函数对象
+
     if (PyDict_Check(builtins)) {
         import = PyObject_GetItem(builtins, import_str);
         if (import == NULL)
@@ -2779,6 +2956,10 @@ PyImport_Import(PyObject *module_name)
 
     /* Call the __import__ function with the proper argument list
      * Always use absolute import here. */
+    // 调用 `__import__` 函数对象，完成导入处理
+    // + 事实上，`__import__` 函数对象默认会指向 `builtin___import__` 函数
+    //   之所以这里不直接调用 builtin___import__，
+    //   是考虑到 `__import__` 属性可能被重载的可能性。
     r = PyObject_CallFunction(import, "OOOOi", module_name, globals,
                               globals, silly_list, 0, NULL);
 
@@ -2790,6 +2971,7 @@ PyImport_Import(PyObject *module_name)
     return r;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
 /* Module 'imp' provides Python access to the primitives used for
    importing modules.
@@ -2836,7 +3018,8 @@ imp_get_suffixes(PyObject *self, PyObject *noargs)
 
 static PyObject *
 call_find_module(char *name, PyObject *path)
-{
+{   // @ imp_find_module
+
     extern int fclose(FILE *);
     PyObject *fob, *ret;
     struct filedescr *fdp;
