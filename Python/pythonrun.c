@@ -185,7 +185,7 @@ Py_InitializeEx(int install_sigs)
         Py_FatalError("Py_Initialize: can't make first thread");
     (void) PyThreadState_Swap(tstate);
 
-    /// 初始化基本数据类型对象
+    /// 初始化基本（内置）数据类型对象
 
     _Py_ReadyTypes();
 
