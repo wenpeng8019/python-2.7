@@ -24,13 +24,16 @@ static PyObject *instance_getattr2(PyInstanceObject *, PyObject *);
 
 static PyObject *getattrstr, *setattrstr, *delattrstr;
 
-
+// 创建一个 type 类型为 class 的对象（class 对象）
 PyObject *
 PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
      /* bases is NULL or tuple of classobjects! */
 {
     PyClassObject *op, *dummy;
     static PyObject *docstr, *modstr, *namestr;
+
+    /// 初始化静态字符串常量："__doc__"、"__module__"、"__name__"
+
     if (docstr == NULL) {
         docstr= PyString_InternFromString("__doc__");
         if (docstr == NULL)
@@ -46,6 +49,8 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
         if (namestr == NULL)
             return NULL;
     }
+
+    /// 验证 class 的 name 和 dict 属性
     if (name == NULL || !PyString_Check(name)) {
         PyErr_SetString(PyExc_TypeError,
                         "PyClass_New: name must be a string");
@@ -56,10 +61,14 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
                         "PyClass_New: dict must be a dictionary");
         return NULL;
     }
+
+    // 初始化 class 的 __doc__ 属性
     if (PyDict_GetItem(dict, docstr) == NULL) {
         if (PyDict_SetItem(dict, docstr, Py_None) < 0)
             return NULL;
     }
+
+    // （对于 module 类型以外的类对象）初始化 class 的 __module__ 属性
     if (PyDict_GetItem(dict, modstr) == NULL) {
         PyObject *globals = PyEval_GetGlobals();
         if (globals != NULL) {
@@ -70,6 +79,9 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
             }
         }
     }
+
+    // 初始化 class 的基类
+    // + 支持多基类继承机制，基类的 type 类型必须是 class
     if (bases == NULL) {
         bases = PyTuple_New(0);
         if (bases == NULL)
@@ -100,6 +112,7 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
         Py_INCREF(bases);
     }
 
+    /// 初始化静态字符串常量："__getattr__"、"__setattr__"、"__delattr__"
     if (getattrstr == NULL) {
         getattrstr = PyString_InternFromString("__getattr__");
         if (getattrstr == NULL)
@@ -112,16 +125,22 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
             goto alloc_error;
     }
 
+    // 创建 class 对象
+    // + 该类对象的 type 类型为 PyClass_Type
     op = PyObject_GC_New(PyClassObject, &PyClass_Type);
     if (op == NULL) {
 alloc_error:
         Py_DECREF(bases);
         return NULL;
     }
+
+    // 设定 class 的基类
     op->cl_bases = bases;
     Py_INCREF(dict);
+    // 设定 class 的属性 dict 对象
     op->cl_dict = dict;
     Py_XINCREF(name);
+    // 设定 class 的 name
     op->cl_name = name;
     op->cl_weakreflist = NULL;
 
@@ -131,6 +150,7 @@ alloc_error:
     Py_XINCREF(op->cl_getattr);
     Py_XINCREF(op->cl_setattr);
     Py_XINCREF(op->cl_delattr);
+
     _PyObject_GC_TRACK(op);
     return (PyObject *) op;
 }
@@ -173,7 +193,8 @@ a tuple of classes, and the third a dictionary.");
 
 static PyObject *
 class_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
-{
+{   // @ PyClass_Type.tp_new
+
     PyObject *name, *bases, *dict;
     static char *kwlist[] = {"name", "bases", "dict", 0};
 
@@ -504,13 +525,19 @@ PyClass_IsSubclass(PyObject *klass, PyObject *base)
 
 PyObject *
 PyInstance_NewRaw(PyObject *klass, PyObject *dict)
-{
+{   // @ extern
+    // @ instance_new
+    // @ PyInstance_New
+
     PyInstanceObject *inst;
 
+    // 验证 klass 的 type 类型为 class 
     if (!PyClass_Check(klass)) {
         PyErr_BadInternalCall();
         return NULL;
     }
+
+    // 初始化（构造）实例对象的属性 dict 对象
     if (dict == NULL) {
         dict = PyDict_New();
         if (dict == NULL)
@@ -523,34 +550,48 @@ PyInstance_NewRaw(PyObject *klass, PyObject *dict)
         }
         Py_INCREF(dict);
     }
+
+    // 动态创建一个实例对象
+    // + 该实例对象的 type 类型为 PyInstance_Type
     inst = PyObject_GC_New(PyInstanceObject, &PyInstance_Type);
     if (inst == NULL) {
         Py_DECREF(dict);
         return NULL;
     }
+
     inst->in_weakreflist = NULL;
     Py_INCREF(klass);
+
+    // 指定该实例对象对应的 class 类对象
     inst->in_class = (PyClassObject *)klass;
+    // 设定定该实例对象的属性 dict 对象
     inst->in_dict = dict;
+
     _PyObject_GC_TRACK(inst);
     return (PyObject *)inst;
 }
 
 PyObject *
 PyInstance_New(PyObject *klass, PyObject *arg, PyObject *kw)
-{
+{   // @ PyClass_Type.tp_call
+
     register PyInstanceObject *inst;
     PyObject *init;
     static PyObject *initstr;
 
+    // 初始化静态常量：__init__
     if (initstr == NULL) {
         initstr = PyString_InternFromString("__init__");
         if (initstr == NULL)
             return NULL;
     }
+
+    // 创建 klass 的实例对象 
     inst = (PyInstanceObject *) PyInstance_NewRaw(klass, NULL);
     if (inst == NULL)
         return NULL;
+    
+    // 获取自定义构造函数
     init = instance_getattr2(inst, initstr);
     if (init == NULL) {
         if (PyErr_Occurred()) {
@@ -568,6 +609,8 @@ PyInstance_New(PyObject *klass, PyObject *arg, PyObject *kw)
         }
     }
     else {
+
+        // 调用自定义构造函数
         PyObject *res = PyEval_CallObjectWithKeywords(init, arg, kw);
         Py_DECREF(init);
         if (res == NULL) {
@@ -598,7 +641,8 @@ If present, dict must be a dictionary or None.");
 
 static PyObject *
 instance_new(PyTypeObject* type, PyObject* args, PyObject *kw)
-{
+{   // @ PyInstance_Type.tp_new
+
     PyObject *klass;
     PyObject *dict = Py_None;
 

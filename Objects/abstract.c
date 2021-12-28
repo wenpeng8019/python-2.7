@@ -2865,7 +2865,8 @@ abstract_issubclass(PyObject *derived, PyObject *cls)
 
 static int
 check_class(PyObject *cls, const char *error)
-{
+{   // @ recursive_isinstance
+
     PyObject *bases = abstract_get_bases(cls);
     if (bases == NULL) {
         /* Do not mask errors. */
@@ -2879,44 +2880,74 @@ check_class(PyObject *cls, const char *error)
 
 static int
 recursive_isinstance(PyObject *inst, PyObject *cls)
-{
+{   // @ PyObject_IsInstance
+    // @ _PyObject_RealIsInstance
+
     PyObject *icls;
     static PyObject *__class__ = NULL;
     int retval = 0;
 
+    // 构造静态常量字符串 "__class__"
     if (__class__ == NULL) {
         __class__ = PyString_InternFromString("__class__");
         if (__class__ == NULL)
             return -1;
     }
 
+    // 如果 cls（的 type 类型）为 class 类型，且 inst（的 type 类型）为 instance 类型
+    // + 根据 OOP 类的继承机制来判定
+    //   ! 从实现逻辑上看，自定义的 class 对象，本质是 type 类型的实例，而不是 type 类型的派生类型
+    //     从这个关系上看，instance 对象也是 type 类型的实例，
+    //     也就是说，虽然它在逻辑上，是 class 对象的实例，但在 type 类型的层级上，它们都是 type 类型的实例，属于同一个级别
     if (PyClass_Check(cls) && PyInstance_Check(inst)) {
         PyObject *inclass =
             (PyObject*)((PyInstanceObject*)inst)->in_class;
         retval = PyClass_IsSubclass(inclass, cls);
     }
+    // 如果 cls 是个类型（对象）
+    // + 也就是 cls（的 type 类型）为 type 类型或其派生类型
+    //   type 类型及其派生类型，是个特殊类型，逻辑上是类型的类型，Python 称其为 matetype
+    //   本质是个类厂，也就是说它创建的实例是个类型对象
+    //   因此，这里的 cls 是个类型（对象），可以是内置类型（如：int、bool、...），也可以是（通过 type(,,) 创建的）动态类型
     else if (PyType_Check(cls)) {
+
+        // 判断 inst 的 type 类型是否是 cls 或其派生类
         retval = PyObject_TypeCheck(inst, (PyTypeObject *)cls);
+
+        // 如果 inst 的 type 类型不是 cls，也不是它的派生类
         if (retval == 0) {
+
+            // 判断 inst 的 __class__ 是否是 cls 或其派生类
+            // + 此时 inst 的 __class__（属性值）和 ob_type（属性值）不一致
+            //   
             PyObject *c = PyObject_GetAttr(inst, __class__);
             if (c == NULL) {
                 PyErr_Clear();
             }
             else {
+
                 if (c != (PyObject *)(inst->ob_type) &&
                     PyType_Check(c))
+
                     retval = PyType_IsSubtype(
                         (PyTypeObject *)c,
                         (PyTypeObject *)cls);
+
                 Py_DECREF(c);
             }
         }
     }
+    // 如果 cls（的 type 类型）是 class 类型、但 inst（的 type 类型）不是 instance 类型
     else {
+
+        // 验证 cls 是类型（对象）是 class 类型
+        // + 即存在基类信息
         if (!check_class(cls,
             "isinstance() arg 2 must be a class, type,"
             " or tuple of classes and types"))
             return -1;
+        
+        // 获取 inst 的类型
         icls = PyObject_GetAttr(inst, __class__);
         if (icls == NULL) {
             PyErr_Clear();
@@ -2940,6 +2971,8 @@ PyObject_IsInstance(PyObject *inst, PyObject *cls)
     if (Py_TYPE(inst) == (PyTypeObject *)cls)
         return 1;
 
+    // 参数 cls 是个 tuple 类型
+    // + 也就是多个 type 或 class 集合 
     if (PyTuple_Check(cls)) {
         Py_ssize_t i;
         Py_ssize_t n;
@@ -2947,19 +2980,25 @@ PyObject_IsInstance(PyObject *inst, PyObject *cls)
 
         if (Py_EnterRecursiveCall(" in __instancecheck__"))
             return -1;
+
         n = PyTuple_GET_SIZE(cls);
         for (i = 0; i < n; ++i) {
             PyObject *item = PyTuple_GET_ITEM(cls, i);
+
             r = PyObject_IsInstance(inst, item);
             if (r != 0)
                 /* either found it, or got an error */
                 break;
         }
+
         Py_LeaveRecursiveCall();
         return r;
     }
 
+    /// 优先由 __instancecheck__ 接口（如果存在）处理
+
     if (!(PyClass_Check(cls) || PyInstance_Check(cls))) {
+
         PyObject *checker;
         checker = _PyObject_LookupSpecial(cls, "__instancecheck__", &name);
         if (checker != NULL) {
@@ -2981,6 +3020,7 @@ PyObject_IsInstance(PyObject *inst, PyObject *cls)
         else if (PyErr_Occurred())
             return -1;
     }
+
     return recursive_isinstance(inst, cls);
 }
 

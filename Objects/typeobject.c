@@ -174,11 +174,14 @@ assign_version_tag(PyTypeObject *type)
         PyType_Modified(&PyBaseObject_Type);
         return 1;
     }
+
     bases = type->tp_bases;
     n = PyTuple_GET_SIZE(bases);
     for (i = 0; i < n; i++) {
         PyObject *b = PyTuple_GET_ITEM(bases, i);
+
         assert(PyType_Check(b));
+
         if (!assign_version_tag((PyTypeObject *)b))
             return 0;
     }
@@ -706,11 +709,16 @@ type_repr(PyTypeObject *type)
     return rtn;
 }
 
+// type 类型（对象）的自调用处理。例如：type()
+// + 该调用的处理存在两种情况
+//   - 只有一个参数 obj，此时返回该 obj 的 type 类型
+//   - 如果是三个参数，此时创建一个 type 类型为 type 的新的类型（对象）
 static PyObject *
 type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
     PyObject *obj;
 
+    // 验证该 type 类型（对象）的 new 接口有效
     if (type->tp_new == NULL) {
         PyErr_Format(PyExc_TypeError,
                      "cannot create '%.100s' instances",
@@ -718,8 +726,10 @@ type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
+    // 调用 new 接口来创建该 type 类型的（类型实例）对象
     obj = type->tp_new(type, args, kwds);
     if (obj != NULL) {
+
         /* Ugly exception: when the call was type(something),
            don't call tp_init on the result. */
         if (type == &PyType_Type &&
@@ -727,10 +737,13 @@ type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
             (kwds == NULL ||
              (PyDict_Check(kwds) && PyDict_Size(kwds) == 0)))
             return obj;
+
         /* If the returned object is not an instance of type,
            it won't be initialized. */
         if (!PyType_IsSubtype(obj->ob_type, type))
             return obj;
+
+        // 执行构造函数    
         type = obj->ob_type;
         if (PyType_HasFeature(type, Py_TPFLAGS_HAVE_CLASS) &&
             type->tp_init != NULL &&
@@ -1124,20 +1137,25 @@ static PyTypeObject *solid_base(PyTypeObject *type);
 
 /* type test with subclassing support */
 
+// 判定 a 类型是否是 b 类型的 (sub) 派生类型
 int
 PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b)
 {
     PyObject *mro;
 
+    // 如果 a 没有基类，那么要么 a == b，要么 b 是 PyBaseObject_Type
+    // + PyBaseObject_Type 默认为所有类的基类
     if (!(a->tp_flags & Py_TPFLAGS_HAVE_CLASS))
         return b == a || b == &PyBaseObject_Type;
 
+    // 如果 a 已经 ready
     mro = a->tp_mro;
     if (mro != NULL) {
         /* Deal with multiple inheritance without recursion
            by walking the MRO tuple */
         Py_ssize_t i, n;
         assert(PyTuple_Check(mro));
+
         n = PyTuple_GET_SIZE(mro);
         for (i = 0; i < n; i++) {
             if (PyTuple_GET_ITEM(mro, i) == (PyObject *)b)
@@ -1145,13 +1163,18 @@ PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b)
         }
         return 0;
     }
+    // 如果 a 还未 ready
+    // + 根据 a 的 tp_base 路径来判断
     else {
+
         /* a is not completely initilized yet; follow tp_base */
         do {
             if (a == b)
                 return 1;
             a = a->tp_base;
         } while (a != NULL);
+
+        //（默认情况下）PyBaseObject_Type 是所有类型的基类
         return b == &PyBaseObject_Type;
     }
 }
@@ -1528,12 +1551,15 @@ pmerge(PyObject *acc, PyObject* to_merge) {
 
 static PyObject *
 mro_implementation(PyTypeObject *type)
-{
+{   // @ mro_internal
+    // @ mro_external
+
     Py_ssize_t i, n;
     int ok;
     PyObject *bases, *result;
     PyObject *to_merge, *bases_aslist;
 
+    // 确保完成 ready 处理
     if (type->tp_dict == NULL) {
         if (PyType_Ready(type) < 0)
             return NULL;
@@ -1555,8 +1581,10 @@ mro_implementation(PyTypeObject *type)
     if (to_merge == NULL)
         return NULL;
 
+    // 遍历继承路径中的基类
     for (i = 0; i < n; i++) {
         PyObject *base = PyTuple_GET_ITEM(bases, i);
+
         PyObject *parentMRO;
         if (PyType_Check(base))
             parentMRO = PySequence_List(
@@ -1602,7 +1630,8 @@ mro_implementation(PyTypeObject *type)
 
 static PyObject *
 mro_external(PyObject *self)
-{
+{   // @ type_methods['mro']
+
     PyTypeObject *type = (PyTypeObject *)self;
 
     return mro_implementation(type);
@@ -1610,7 +1639,9 @@ mro_external(PyObject *self)
 
 static int
 mro_internal(PyTypeObject *type)
-{
+{   // @ PyType_Ready
+    // @ type_set_bases
+
     PyObject *mro, *result, *tuple;
     int checkit = 0;
 
@@ -2039,6 +2070,9 @@ type_init(PyObject *cls, PyObject *args, PyObject *kwds)
     return res;
 }
 
+// type 类型（对象）（在自调用时）创建自己的（类型实例）对象
+// + type 类型（对象）是个特殊的类型，它在逻辑上相当于一个类厂对象
+//   即它创建的（类型实例）对象应该是一个 type 类型为 type 的类型（对象）
 static PyObject *
 type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
 {
@@ -2055,19 +2089,26 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
     assert(kwds == NULL || PyDict_Check(kwds));
 
     /* Special case: type(x) should return x->ob_type */
+    // 如果只有一个参数，则返回该参数表示的对象的 type 类型
     {
         const Py_ssize_t nargs = PyTuple_GET_SIZE(args);
         const Py_ssize_t nkwds = kwds == NULL ? 0 : PyDict_Size(kwds);
 
+        // 如果 metatype（类厂） 的 type 类型为 type、且只有一个 arg 参数
         if (PyType_CheckExact(metatype) && nargs == 1 && nkwds == 0) {
+
+            // 获取参数传入的对象
             PyObject *x = PyTuple_GET_ITEM(args, 0);
             Py_INCREF(Py_TYPE(x));
+
+            // 返回对象的 type 类型
             return (PyObject *) Py_TYPE(x);
         }
 
         /* SF bug 475327 -- if that didn't trigger, we need 3
            arguments. but PyArg_ParseTupleAndKeywords below may give
            a msg saying type() needs exactly 3. */
+        // （其他情况）验证参数必须为 3 个
         if (nargs + nkwds != 3) {
             PyErr_SetString(PyExc_TypeError,
                             "type() takes 1 or 3 arguments");
@@ -2076,6 +2117,7 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
     }
 
     /* Check arguments: (name, bases, dict) */
+    // 解析参数为三元组
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "SO!O!:type", kwlist,
                                      &name,
                                      &PyTuple_Type, &bases,
@@ -2086,19 +2128,32 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
        and check for metatype conflicts while we're at it.
        Note that if some other metatype wins to contract,
        it's possible that its instances are not types. */
+    // 获取 bases 基类中的最大派生类型
     nbases = PyTuple_GET_SIZE(bases);
+    // 默认以 type 类型（对象）作为 metaclass
     winner = metatype;
     for (i = 0; i < nbases; i++) {
         tmp = PyTuple_GET_ITEM(bases, i);
         tmptype = tmp->ob_type;
+
+        // base 的 type 类型为 class
+        // + 此时 base 为基类，不是 metaclass
         if (tmptype == &PyClass_Type)
             continue; /* Special case classic classes */
+
+        /// 此时的 base 都是 type 类型（对象）的派生类型，即作为 metaclass
+
+        // base 是基类
         if (PyType_IsSubtype(winner, tmptype))
             continue;
+
+        // base 是派生类
         if (PyType_IsSubtype(tmptype, winner)) {
             winner = tmptype;
             continue;
         }
+
+        // metaclass 之间的继承关系冲突
         PyErr_SetString(PyExc_TypeError,
                         "metaclass conflict: "
                         "the metaclass of a derived class "
@@ -2106,13 +2161,19 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
                         "of the metaclasses of all its bases");
         return NULL;
     }
+
+    // 如果指定了自定义的 metatype
     if (winner != metatype) {
+
+        // 通过自定义的 metatype 来创建 type 类型（对象）
         if (winner->tp_new != type_new) /* Pass it to the winner */
             return winner->tp_new(winner, args, kwds);
+
         metatype = winner;
     }
 
     /* Adjust for empty tuple bases */
+    // 如果 bases 为空，默认使用 `object` 类型作为基类
     if (nbases == 0) {
         bases = PyTuple_Pack(1, &PyBaseObject_Type);
         if (bases == NULL)
@@ -2137,6 +2198,8 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
         Py_DECREF(bases);
         return NULL;
     }
+
+    /// 构造新建的 type（类型）对象的 slots
 
     /* Check for a __slots__ sequence variable in dict, and count it */
     slots = PyDict_GetItemString(dict, "__slots__");
@@ -2292,7 +2355,10 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
     /* XXX From here until type is safely allocated,
        "return NULL" may leak slots! */
 
+    /// 动态创建一个 type 类型（对象）
+
     /* Allocate the type object */
+    // 这里的 metatype 就是 type 对象
     type = (PyTypeObject *)metatype->tp_alloc(metatype, nslots);
     if (type == NULL) {
         Py_XDECREF(slots);
@@ -2754,7 +2820,7 @@ PyTypeObject PyType_Type = {
     0,                                          /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                  /* tp_compare */
+    0,                                          /* tp_compare */
     (reprfunc)type_repr,                        /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */
@@ -3703,8 +3769,12 @@ inherit_special(PyTypeObject *type, PyTypeObject *base)
     }
 
     /* Setup fast subclass flags */
+    /// （根据基类的类型特征）标记该类型（对象）是否是（某个）系统内置类型的派生类型
+
+    // 如果 base 是 BaseException 类型的派生类
     if (PyType_IsSubtype(base, (PyTypeObject*)PyExc_BaseException))
         type->tp_flags |= Py_TPFLAGS_BASE_EXC_SUBCLASS;
+    // 如果 base 是 type 类型的派生类
     else if (PyType_IsSubtype(base, &PyType_Type))
         type->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
     else if (PyType_IsSubtype(base, &PyInt_Type))
@@ -3742,7 +3812,8 @@ overrides_name(PyTypeObject *type, char *name)
 
 static void
 inherit_slots(PyTypeObject *type, PyTypeObject *base)
-{
+{   // @ PyType_Ready
+
     PyTypeObject *basebase;
 
 #undef SLOTDEFINED
@@ -3936,6 +4007,8 @@ inherit_slots(PyTypeObject *type, PyTypeObject *base)
 
 static int add_operators(PyTypeObject *);
 
+// 完成类型（对象）的初始化创建工作
+// + 主要用于动态构建类型之间的（继承）关系
 int
 PyType_Ready(PyTypeObject *type)
 {
@@ -3943,14 +4016,17 @@ PyType_Ready(PyTypeObject *type)
     PyTypeObject *base;
     Py_ssize_t i, n;
 
+    // 如果已经 ready，直接返回
     if (type->tp_flags & Py_TPFLAGS_READY) {
         assert(type->tp_dict != NULL);
         return 0;
     }
     assert((type->tp_flags & Py_TPFLAGS_READYING) == 0);
 
+    // 标记 readying
     type->tp_flags |= Py_TPFLAGS_READYING;
 
+    // 添加到全部对象队列
 #ifdef Py_TRACE_REFS
     /* PyType_Ready is the closest thing we have to a choke point
      * for type objects, so is the best place I can think of to try
@@ -3961,6 +4037,8 @@ PyType_Ready(PyTypeObject *type)
 #endif
 
     /* Initialize tp_base (defaults to BaseObject unless that's us) */
+    // 初始化类型的基类（对象），默认为 PyBaseObject_Type 类型（对象）
+    // + 对于 type 类型（对象）自身，其基类也会（在此时）被默认指定为 PyBaseObject_Type 对象
     base = type->tp_base;
     if (base == NULL && type != &PyBaseObject_Type) {
         base = type->tp_base = &PyBaseObject_Type;
@@ -3969,9 +4047,11 @@ PyType_Ready(PyTypeObject *type)
 
     /* Now the only way base can still be NULL is if type is
      * &PyBaseObject_Type.
+     * 只有 PyBaseObject_Type 类型自身的 base 才可以为 NULL
      */
 
     /* Initialize the base class */
+    // （优先）完成基类的初始化
     if (base && base->tp_dict == NULL) {
         if (PyType_Ready(base) < 0)
             goto error;
@@ -3984,14 +4064,19 @@ PyType_Ready(PyTypeObject *type)
        NULL when type is &PyBaseObject_Type, and we know its ob_type is
        not NULL (it's initialized to &PyType_Type).      But coverity doesn't
        know that. */
+    // 如果没有指定该类型（对象）的类型，默认和 base 的 type 类型保持一致
     if (Py_TYPE(type) == NULL && base != NULL)
         Py_TYPE(type) = Py_TYPE(base);
 
     /* Initialize tp_bases */
+    // 初始化默认基类集合
     bases = type->tp_bases;
     if (bases == NULL) {
+
+        // 对于 PyBaseObject_Type 类型
         if (base == NULL)
             bases = PyTuple_New(0);
+        // 默认（至少）有一个基类
         else
             bases = PyTuple_Pack(1, base);
         if (bases == NULL)
@@ -4000,6 +4085,7 @@ PyType_Ready(PyTypeObject *type)
     }
 
     /* Initialize tp_dict */
+    // 初始化类型（对象）的数据 dict 对象
     dict = type->tp_dict;
     if (dict == NULL) {
         dict = PyDict_New();
@@ -4007,6 +4093,8 @@ PyType_Ready(PyTypeObject *type)
             goto error;
         type->tp_dict = dict;
     }
+
+    /// 将类型（对象）的各个接口定义添加到对象的数据域（dict 对象）
 
     /* Add type-specific descriptors to tp_dict */
     if (add_operators(type) < 0)
@@ -4025,26 +4113,31 @@ PyType_Ready(PyTypeObject *type)
     }
 
     /* Calculate method resolution order */
+    // 计算基类的继承顺序
     if (mro_internal(type) < 0) {
         goto error;
     }
 
     /* Inherit special flags from dominant base */
+    // 初始化基于继承关系的 flags
     if (type->tp_base != NULL)
         inherit_special(type, type->tp_base);
 
     /* Initialize tp_dict properly */
+    // （根据类的继承关系）初始化基于继承关系的 slots 接口
     bases = type->tp_mro;
     assert(bases != NULL);
     assert(PyTuple_Check(bases));
     n = PyTuple_GET_SIZE(bases);
     for (i = 1; i < n; i++) {
         PyObject *b = PyTuple_GET_ITEM(bases, i);
+
         if (PyType_Check(b))
             inherit_slots(type, (PyTypeObject *)b);
     }
 
     /* Sanity check for tp_free. */
+    // 对于动态分配的类型（对象），需要验证内存回收处理机制
     if (PyType_IS_GC(type) && (type->tp_flags & Py_TPFLAGS_BASETYPE) &&
         (type->tp_free == NULL || type->tp_free == PyObject_Del)) {
         /* This base class needs to call tp_free, but doesn't have
@@ -4074,6 +4167,7 @@ PyType_Ready(PyTypeObject *type)
     }
 
     /* Some more special stuff */
+    // 从基类继承抽象数据类型处理接口
     base = type->tp_base;
     if (base != NULL) {
         if (type->tp_as_number == NULL)
@@ -4087,19 +4181,26 @@ PyType_Ready(PyTypeObject *type)
     }
 
     /* Link into each base class's list of subclasses */
+    // 建立所有基类和自己的关系
+    // + 将自己添加到所有基类（对象）中的 subclasses 列表中
     bases = type->tp_bases;
     n = PyTuple_GET_SIZE(bases);
     for (i = 0; i < n; i++) {
         PyObject *b = PyTuple_GET_ITEM(bases, i);
+
         if (PyType_Check(b) &&
             add_subclass((PyTypeObject *)b, type) < 0)
             goto error;
     }
 
     /* All done -- set the ready flag */
+
     assert(type->tp_dict != NULL);
+
+    // 添加标记：ready 完成
     type->tp_flags =
         (type->tp_flags & ~Py_TPFLAGS_READYING) | Py_TPFLAGS_READY;
+
     return 0;
 
   error:

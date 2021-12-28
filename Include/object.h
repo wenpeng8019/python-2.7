@@ -344,7 +344,7 @@ typedef struct _typeobject {
     /* More standard operations (here for binary compatibility) */
 
     hashfunc tp_hash;
-    ternaryfunc tp_call;
+    ternaryfunc tp_call;                        // 该类型（对象）的自身调用处理接口（例如：type()、int()、...）
     reprfunc tp_str;
     getattrofunc tp_getattro;
     setattrofunc tp_setattro;
@@ -377,23 +377,23 @@ typedef struct _typeobject {
     iternextfunc tp_iternext;
 
     /* Attribute descriptor and subclassing stuff */
-    struct PyMethodDef *tp_methods;
-    struct PyMemberDef *tp_members;
-    struct PyGetSetDef *tp_getset;
-    struct _typeobject *tp_base;
-    PyObject *tp_dict;
+    struct PyMethodDef *tp_methods;                 // 该类型（对象）的方法定义
+    struct PyMemberDef *tp_members;                 // 该类型（对象）的成员定义
+    struct PyGetSetDef *tp_getset;                  // 该类型（对象）的 getter/setter 属性访问接口
+    struct _typeobject *tp_base;                    // 该类型（对象）的（直接）基类型
+    PyObject *tp_dict;                              // 该类型（对象）的数据 dict 对象
     descrgetfunc tp_descr_get;
     descrsetfunc tp_descr_set;
     Py_ssize_t tp_dictoffset;
-    initproc tp_init;
-    allocfunc tp_alloc;
+    initproc tp_init;                               // 该类型（对象）的构造函数
+    allocfunc tp_alloc;                             // 该类型（对象）的分配一个新的实例（对象）
     newfunc tp_new;
-    freefunc tp_free; /* Low-level free-memory routine */
-    inquiry tp_is_gc; /* For PyObject_IS_GC */
-    PyObject *tp_bases;
-    PyObject *tp_mro; /* method resolution order */
+    freefunc tp_free;                               /* Low-level free-memory routine */
+    inquiry tp_is_gc;                               /* For PyObject_IS_GC（该类型对象是否是动态创建的。内置类型对象、None、True、...等对象都是静态全局对象） */
+    PyObject *tp_bases;                             /* 该类型（对象）的基类集合（允许多基类继承，集合中的基类没有顺序的概念） */
+    PyObject *tp_mro;                               /* method resolution order (类方法解析顺序。也就是将 tp_bases 按类的继承关系进行排序的结果) */
     PyObject *tp_cache;
-    PyObject *tp_subclasses;
+    PyObject *tp_subclasses;                        /* 该类型（对象）下的有所（sub）派生类的集合 */
     PyObject *tp_weaklist;
     destructor tp_del;
 
@@ -442,8 +442,10 @@ PyAPI_DATA(PyTypeObject) PyType_Type; /* built-in 'type' */
 PyAPI_DATA(PyTypeObject) PyBaseObject_Type; /* built-in 'object' */
 PyAPI_DATA(PyTypeObject) PySuper_Type; /* built-in 'super' */
 
+// 判定某个对象的 type 类型，是否是 type 类型、或其派生类型
 #define PyType_Check(op) \
     PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_TYPE_SUBCLASS)
+// 判定某个对象的 type 类型，是否是 type 类型
 #define PyType_CheckExact(op) (Py_TYPE(op) == &PyType_Type)
 
 PyAPI_FUNC(int) PyType_Ready(PyTypeObject *);
@@ -624,6 +626,7 @@ manually remove this flag though!
 #define Py_TPFLAGS_HAVE_NEWBUFFER (1L<<21)
 
 /* These flags are used to determine if a type is a subclass. */
+/// 用于标记某个类型（对象）是否是（某个）系统内置类型的派生类型
 #define Py_TPFLAGS_INT_SUBCLASS         (1L<<23)
 #define Py_TPFLAGS_LONG_SUBCLASS        (1L<<24)
 #define Py_TPFLAGS_LIST_SUBCLASS        (1L<<25)
@@ -631,7 +634,9 @@ manually remove this flag though!
 #define Py_TPFLAGS_STRING_SUBCLASS      (1L<<27)
 #define Py_TPFLAGS_UNICODE_SUBCLASS     (1L<<28)
 #define Py_TPFLAGS_DICT_SUBCLASS        (1L<<29)
+// 是否是 BaseException 类型的派生类
 #define Py_TPFLAGS_BASE_EXC_SUBCLASS    (1L<<30)
+// 是否是 type 类型的派生类
 #define Py_TPFLAGS_TYPE_SUBCLASS        (1L<<31)
 
 #define Py_TPFLAGS_DEFAULT_EXTERNAL ( \
