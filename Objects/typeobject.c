@@ -709,7 +709,7 @@ type_repr(PyTypeObject *type)
     return rtn;
 }
 
-// type 类型（对象）的自调用处理。例如：type()
+// 数据类型（对象）`type` 的自调用处理。例如：type()
 // + 该调用的处理存在两种情况
 //   - 只有一个参数 obj，此时返回该 obj 的 type 类型
 //   - 如果是三个参数，此时创建一个 type 类型为 type 的新的类型（对象）
@@ -755,6 +755,7 @@ type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
     return obj;
 }
 
+// 数据类型（对象）通用的动态分配实例（对象）的处理
 PyObject *
 PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)
 {
@@ -785,6 +786,7 @@ PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)
     return obj;
 }
 
+// 数据类型（对象）通用的新建一个实例（对象）的处理
 PyObject *
 PyType_GenericNew(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
@@ -2897,6 +2899,9 @@ PyTypeObject PyType_Type = {
     (inquiry)type_is_gc,                        /* tp_is_gc */
 };
 
+///////////////////////////////////////////////////////////////////////////////
+// `object` 类型（对象）的定义
+///////////////////////////////////////////////////////////////////////////////
 
 /* The base type of all types (eventually)... except itself. */
 
@@ -2951,12 +2956,26 @@ excess_args(PyObject *args, PyObject *kwds)
         (kwds && PyDict_Check(kwds) && PyDict_Size(kwds));
 }
 
+// 数据类型（对象）`object` 的 tp_int (初始化构造) 接口的实现
+// + 完成对该数据类型的实例（对象）的初始化构造处理
+// + `object` 作为所有数据类型（对象）的基类，它的实现，就是所有数据类型（对象）默认实现
+//   这里并没有做任何实际处理，只是对参数的有效性做了验证
+// + 关于参数
+//   - `self`
+//     + 根据 tp_init 接口规范，`self` 就是要被初始化构造的（`object` 或其派生类型的）实例（对象）
 static int
 object_init(PyObject *self, PyObject *args, PyObject *kwds)
-{
+{   // @ PyBaseObject_Type.tp_init
+
     int err = 0;
+
+    // 如果参数不为空
     if (excess_args(args, kwds)) {
+
+        // 获取要被初始化构造的实例对象的数据类型
         PyTypeObject *type = Py_TYPE(self);
+
+        // 如果 `type` 重载了 `object` 默认的的 tp_new 和 tp_init 处理
         if (type->tp_init != object_init &&
             type->tp_new != object_new)
         {
@@ -2975,11 +2994,23 @@ object_init(PyObject *self, PyObject *args, PyObject *kwds)
     return err;
 }
 
+// 数据类型（对象）`object` 的 tp_new (新建) 接口的实现
+// + `object` 作为所有数据类型（对象）的基类，它的实现，就是所有数据类型（对象）默认实现
+// + 关于参数
+//   - `type`
+//     + 根据 tp_new 接口规范，`type` 作为 new 新建实例的数据类型
+//       同时，它必须是该 tp_new 接口所属数据类型（对象），这里就是指 `object`，的派生类型
+//       由于 `object` 是所有数据类型（对象）的基类。因此，这里的 `type` 可以是任意的数据类型（对象）
 static PyObject *
 object_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
-{
+{   // @ PyBaseObject_Type.tp_new
+
     int err = 0;
+
+    // 如果参数不为空
     if (excess_args(args, kwds)) {
+
+        // 如果 `type` 重载了 `object` 默认的的 tp_new 和 tp_init 处理
         if (type->tp_new != object_new &&
             type->tp_init != object_init)
         {
@@ -3001,6 +3032,7 @@ object_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     // 对于抽象数据类型，禁止执行 new 操作
     // + 这里会执行报错处理
     if (type->tp_flags & Py_TPFLAGS_IS_ABSTRACT) {
+
         static PyObject *comma = NULL;
         PyObject *abstract_methods = NULL;
         PyObject *builtins;
@@ -3050,7 +3082,7 @@ object_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    // 默认直接执行 alloc 处理
+    // 默认直接执行 `type` 的 alloc 处理接口
     return type->tp_alloc(type, 0);
 }
 
@@ -3067,16 +3099,21 @@ object_repr(PyObject *self)
     PyObject *mod, *name, *rtn;
 
     type = Py_TYPE(self);
+
     mod = type_module(type, NULL);
     if (mod == NULL)
         PyErr_Clear();
+
     else if (!PyString_Check(mod)) {
         Py_DECREF(mod);
         mod = NULL;
     }
+
     name = type_name(type, NULL);
     if (name == NULL)
         return NULL;
+
+    // 对于 builtin 数据类型
     if (mod != NULL && strcmp(PyString_AS_STRING(mod), "__builtin__"))
         rtn = PyString_FromFormat("<%s.%s object at %p>",
                                   PyString_AS_STRING(mod),
@@ -3101,9 +3138,17 @@ object_str(PyObject *self)
     return f(self);
 }
 
+// 数据类型（对象）`object` 的获取 "__class__" 属性的实现
+// + 返回该数据类型的实例（对象）的 "__class__" 属性值
+// + `object` 作为所有数据类型（对象）的基类，它的实现，就是所有数据类型（对象）默认实现
+// + 关于参数
+//   - `self`
+//     + 根据接口规范，`self` 就是要访问的（`object` 或其派生类型的）实例（对象）
 static PyObject *
 object_get_class(PyObject *self, void *closure)
-{
+{   // @ PyBaseObject_Type.tp_getset.__class__@object_getsets
+
+    // 默认直接返回实例（对象）的数据类型（对象）
     Py_INCREF(Py_TYPE(self));
     return (PyObject *)(Py_TYPE(self));
 }
@@ -3149,9 +3194,12 @@ same_slots_added(PyTypeObject *a, PyTypeObject *b)
 
 static int
 compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, char* attr)
-{
+{   // @ object_set_class
+    // @ type_set_bases
+
     PyTypeObject *newbase, *oldbase;
 
+    // 验证变更前后的数据类型的析构处理，必须一致
     if (newto->tp_dealloc != oldto->tp_dealloc ||
         newto->tp_free != oldto->tp_free)
     {
@@ -3163,6 +3211,8 @@ compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, char* attr)
                      oldto->tp_name);
         return 0;
     }
+
+    // 验证变更前后的数据类型的继承路径，必须一致
     newbase = newto;
     oldbase = oldto;
     while (equiv_structs(newbase, newbase->tp_base))
@@ -3172,6 +3222,7 @@ compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, char* attr)
     if (newbase != oldbase &&
         (newbase->tp_base != oldbase->tp_base ||
          !same_slots_added(newbase, oldbase))) {
+
         PyErr_Format(PyExc_TypeError,
                      "%s assignment: "
                      "'%s' object layout differs from '%s'",
@@ -3184,23 +3235,36 @@ compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, char* attr)
     return 1;
 }
 
+// 数据类型（对象）`object` 的修改 "__class__" 属性的实现
+// + 返回该数据类型的实例（对象）的 "__class__" 属性值
+// + `object` 作为所有数据类型（对象）的基类，它的实现，就是所有数据类型（对象）默认实现
+// + 关于参数
+//   - `self`
+//     + 根据接口规范，`self` 就是要访问的（`object` 或其派生类型的）实例（对象）
 static int
 object_set_class(PyObject *self, PyObject *value, void *closure)
-{
+{   // @ PyBaseObject_Type.tp_getset.__class__@object_getsets
+
+    // 获取实例（对象）之前的数据类型（对象）
     PyTypeObject *oldto = Py_TYPE(self);
     PyTypeObject *newto;
 
+    // 验证修改后的值不能为空
     if (value == NULL) {
         PyErr_SetString(PyExc_TypeError,
                         "can't delete __class__ attribute");
         return -1;
     }
+
+    // 验证修改后的值必须是个数据类型（对象）
     if (!PyType_Check(value)) {
         PyErr_Format(PyExc_TypeError,
           "__class__ must be set to new-style class, not '%s' object",
           Py_TYPE(value)->tp_name);
         return -1;
     }
+
+    // 验证变更前后的数据类型（对象），必须是动态数据类型（对象），也就是由 type(.., .., ..) 动态创建的
     newto = (PyTypeObject *)value;
     if (!(newto->tp_flags & Py_TPFLAGS_HEAPTYPE) ||
         !(oldto->tp_flags & Py_TPFLAGS_HEAPTYPE))
@@ -3209,10 +3273,15 @@ object_set_class(PyObject *self, PyObject *value, void *closure)
                      "__class__ assignment: only for heap types");
         return -1;
     }
+
+    // 如果变更前后的数据类型，彼此互相兼容
     if (compatible_for_assignment(newto, oldto, "__class__")) {
+
         Py_INCREF(newto);
         Py_TYPE(self) = newto;
+
         Py_DECREF(oldto);
+
         return 0;
     }
     else {
@@ -4817,7 +4886,7 @@ wrap_descr_get(PyObject *self, PyObject *args, void *wrapped)
         obj = NULL;
     if (type == Py_None)
         type = NULL;
-    if (type == NULL &&obj == NULL) {
+    if (type == NULL && obj == NULL) {
         PyErr_SetString(PyExc_TypeError,
                         "__get__(None, None) is invalid");
         return NULL;
@@ -4869,6 +4938,7 @@ wrap_init(PyObject *self, PyObject *args, void *wrapped, PyObject *kwds)
     return Py_None;
 }
 
+// 触发数据类型（对象）`self` 的 `__new__` 操作符
 static PyObject *
 tp_new_wrapper(PyObject *self, PyObject *args, PyObject *kwds)
 {   // @ tp_new_methoddef.__new__
@@ -4876,15 +4946,22 @@ tp_new_wrapper(PyObject *self, PyObject *args, PyObject *kwds)
     PyTypeObject *type, *subtype, *staticbase;
     PyObject *arg0, *res;
 
+    // 验证数据类型（对象）`self` 有效
     if (self == NULL || !PyType_Check(self))
         Py_FatalError("__new__() called with non-type 'self'");
+
+    // 获取数据类型（对象）`self` 到结构化指针变量 `type`
     type = (PyTypeObject *)self;
+
+    // 验证参数有效
     if (!PyTuple_Check(args) || PyTuple_GET_SIZE(args) < 1) {
         PyErr_Format(PyExc_TypeError,
                      "%s.__new__(): not enough arguments",
                      type->tp_name);
         return NULL;
     }
+
+    // 验证第一个参数为数据类型（对象）
     arg0 = PyTuple_GET_ITEM(args, 0);
     if (!PyType_Check(arg0)) {
         PyErr_Format(PyExc_TypeError,
@@ -4893,6 +4970,9 @@ tp_new_wrapper(PyObject *self, PyObject *args, PyObject *kwds)
                      Py_TYPE(arg0)->tp_name);
         return NULL;
     }
+
+    // 获取第一个参数到结构化指针变量 `subtype`，并验证 `subtype` 是 `self` 的派生类型
+    // + 这里的 `subtype` 将作为 `new`（新建）实例对象的数据类型
     subtype = (PyTypeObject *)arg0;
     if (!PyType_IsSubtype(subtype, type)) {
         PyErr_Format(PyExc_TypeError,
@@ -4921,10 +5001,13 @@ tp_new_wrapper(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
+    // 构造新的 args
+    // + 将原来 args 中的第一个参数去除
     args = PyTuple_GetSlice(args, 1, PyTuple_GET_SIZE(args));
     if (args == NULL)
         return NULL;
 
+    // 触发数据类型（对象）`self` 的 `tp_new` 处理接口
     res = type->tp_new(subtype, args, kwds);
 
     Py_DECREF(args);
@@ -5763,25 +5846,32 @@ slot_tp_descr_get(PyObject *self, PyObject *obj, PyObject *type)
 {
     PyTypeObject *tp = Py_TYPE(self);
     PyObject *get;
-    static PyObject *get_str = NULL;
 
+    // 初始化静态常量字符串 "__get__"
+    static PyObject *get_str = NULL;
     if (get_str == NULL) {
         get_str = PyString_InternFromString("__get__");
         if (get_str == NULL)
             return NULL;
     }
+
+    // 获取基于类继承后的 __get__ 处理接口
     get = _PyType_Lookup(tp, get_str);
     if (get == NULL) {
+
         /* Avoid further slowdowns */
         if (tp->tp_descr_get == slot_tp_descr_get)
             tp->tp_descr_get = NULL;
+
         Py_INCREF(self);
         return self;
     }
+
     if (obj == NULL)
         obj = Py_None;
     if (type == NULL)
         type = Py_None;
+
     return PyObject_CallFunctionObjArgs(get, self, obj, type, NULL);
 }
 
@@ -6181,6 +6271,7 @@ static slotdef slotdefs[] = {
    the offset to the type pointer, since it takes care to indirect through the
    proper indirection pointer (as_buffer, etc.); it returns NULL if the
    indirection pointer is NULL. */
+// 通过接口的索引编号，获取接口函数的实际入口地址
 static void **
 slotptr(PyTypeObject *type, int ioffset)
 {
