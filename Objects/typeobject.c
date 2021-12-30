@@ -5934,16 +5934,16 @@ slot_tp_del(PyObject *self)
 
 typedef struct wrapperbase slotdef;
 
-#undef TPSLOT
-#undef FLSLOT
-#undef ETSLOT
-#undef SQSLOT
-#undef MPSLOT
-#undef NBSLOT
-#undef UNSLOT
-#undef IBSLOT
-#undef BINSLOT
-#undef RBINSLOT
+#undef TPSLOT   /* type slot */
+#undef FLSLOT   /* flags slot */
+#undef ETSLOT   /*  slot */
+#undef SQSLOT   /* sequence slot */
+#undef MPSLOT   /* mapping slot */
+#undef NBSLOT   /* number slot */
+#undef UNSLOT   /* unary（单目运算）number slot */
+#undef IBSLOT   /* inplace number slot */
+#undef BINSLOT  /* binary slot */
+#undef RBINSLOT /* revert binary slot */
 
 #define TPSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC) \
     {NAME, offsetof(PyTypeObject, SLOT), (void *)(FUNCTION), WRAPPER, \
@@ -5979,6 +5979,7 @@ typedef struct wrapperbase slotdef;
     ETSLOT(NAME, as_number.SLOT, FUNCTION, wrap_binaryfunc_r, \
            "x." NAME "(y) <==> " DOC)
 
+// 系统原生数据类型的 {默认 builtin 处理接口定义描述表}
 static slotdef slotdefs[] = {
     SQSLOT("__len__", sq_length, slot_sq_length, wrap_lenfunc,
            "x.__len__() <==> len(x)"),
@@ -6232,6 +6233,8 @@ resolve_slotdups(PyTypeObject *type, PyObject *name)
         /* Collect all slotdefs that match name into ptrs. */
         pname = name;
         pp = ptrs;
+
+        // 遍历 {默认 builtin 处理接口定义描述表}
         for (p = slotdefs; p->name_strobj; p++) {
             if (p->name_strobj == name)
                 *pp++ = p;
@@ -6368,21 +6371,31 @@ slotdef_cmp(const void *aa, const void *bb)
 
 /* Initialize the slotdefs table by adding interned string objects for the
    names and sorting the entries. */
+// 初始化系统原生数据类型的 {默认 builtin 处理接口定义描述表}
 static void
 init_slotdefs(void)
-{
+{   // @ add_operators
+    // @ update_slot
+    // @ update_all_slots
+    // @ fixup_slot_dispatchers
+
     slotdef *p;
     static int initialized = 0;
 
     if (initialized)
         return;
+
+    // 遍历 {默认 builtin 处理接口定义描述表}
     for (p = slotdefs; p->name; p++) {
         p->name_strobj = PyString_InternFromString(p->name);
         if (!p->name_strobj)
             Py_FatalError("Out of memory interning slotdef names");
     }
+
+    // 对接口表进行排序
     qsort((void *)slotdefs, (size_t)(p-slotdefs), sizeof(slotdef),
           slotdef_cmp);
+
     initialized = 1;
 }
 
@@ -6402,7 +6415,9 @@ update_slot(PyTypeObject *type, PyObject *name)
        recursing into subclasses. */
     PyType_Modified(type);
 
+    // 确保 {默认 builtin 处理接口定义描述表} 初始化完成
     init_slotdefs();
+
     pp = ptrs;
     for (p = slotdefs; p->name; p++) {
         /* XXX assume name is interned! */
@@ -6431,7 +6446,9 @@ fixup_slot_dispatchers(PyTypeObject *type)
 {
     slotdef *p;
 
+    // 确保 {默认 builtin 处理接口定义描述表} 初始化完成
     init_slotdefs();
+
     for (p = slotdefs; p->name; )
         p = update_one_slot(type, p);
 }
@@ -6441,7 +6458,9 @@ update_all_slots(PyTypeObject* type)
 {
     slotdef *p;
 
+    // 确保 {默认 builtin 处理接口定义描述表} 初始化完成
     init_slotdefs();
+
     for (p = slotdefs; p->name; p++) {
         /* update_slot returns int but can't actually fail */
         update_slot(type, p->name_strobj);
@@ -6523,6 +6542,7 @@ recurse_down_subclasses(PyTypeObject *type, PyObject *name,
    slot that calls the method from the dictionary, and we want to avoid
    infinite recursion here.) */
 
+// 给系统原生数据类型（对象），添加默认 builtin 处理接口
 static int
 add_operators(PyTypeObject *type)
 {   // @ PyType_Ready
@@ -6532,11 +6552,15 @@ add_operators(PyTypeObject *type)
     PyObject *descr;
     void **ptr;
 
+    // 确保 {默认 builtin 处理接口定义描述表} 初始化完成
     init_slotdefs();
+
+    // 遍历默认 builtin 处理接口表
     for (p = slotdefs; p->name; p++) {
         if (p->wrapper == NULL)
             continue;
 
+        // 获取该处理接口项，所属的抽象类型结构的入口地址
         ptr = slotptr(type, p->offset);
         if (!ptr || !*ptr)
             continue;
@@ -6544,6 +6568,7 @@ add_operators(PyTypeObject *type)
         if (PyDict_GetItem(dict, p->name_strobj))
             continue;
 
+        // 将处理接口添加到类型（对象）的数据 dict 中
         if (*ptr == PyObject_HashNotImplemented) {
             /* Classes may prevent the inheritance of the tp_hash
                slot by storing PyObject_HashNotImplemented in it. Make it
@@ -6555,8 +6580,10 @@ add_operators(PyTypeObject *type)
             descr = PyDescr_NewWrapper(type, p, *ptr);
             if (descr == NULL)
                 return -1;
+
             if (PyDict_SetItem(dict, p->name_strobj, descr) < 0)
                 return -1;
+
             Py_DECREF(descr);
         }
     }

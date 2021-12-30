@@ -216,6 +216,7 @@ typedef int (*objobjproc)(PyObject *, PyObject *);
 typedef int (*visitproc)(PyObject *, void *);
 typedef int (*traverseproc)(PyObject *, visitproc, void *);
 
+// 抽象数据类型接口之：数值型数据
 typedef struct {
     /* For numbers without flag bit Py_TPFLAGS_CHECKTYPES set, all
        arguments are guaranteed to be of the object's type (modulo
@@ -272,6 +273,7 @@ typedef struct {
     unaryfunc nb_index;
 } PyNumberMethods;
 
+// 抽象数据类型接口之：序列型数据
 typedef struct {
     lenfunc sq_length;
     binaryfunc sq_concat;
@@ -286,12 +288,14 @@ typedef struct {
     ssizeargfunc sq_inplace_repeat;
 } PySequenceMethods;
 
+// 抽象数据类型接口之：映射型数据
 typedef struct {
     lenfunc mp_length;
     binaryfunc mp_subscript;
     objobjargproc mp_ass_subscript;
 } PyMappingMethods;
 
+// 抽象数据类型接口之：I/O型数据
 typedef struct {
     readbufferproc bf_getreadbuffer;
     writebufferproc bf_getwritebuffer;
@@ -323,58 +327,62 @@ typedef PyObject *(*allocfunc)(struct _typeobject *, Py_ssize_t);
 
 typedef struct _typeobject {
     PyObject_VAR_HEAD
+
+    // 类型（对象）的命名
     const char *tp_name; /* For printing, in format "<module>.<name>" */
+    // 类型（对象）的数据结构大小
     Py_ssize_t tp_basicsize, tp_itemsize; /* For allocation */
 
     /* Methods to implement standard operations */
+    // 标准处理接口
 
-    destructor tp_dealloc;
-    printfunc tp_print;
+    destructor  tp_dealloc;     // 类型（对象）的析构处理接口
+    printfunc   tp_print;       // 类型（对象）的析构处理接口
     getattrfunc tp_getattr;
     setattrfunc tp_setattr;
-    cmpfunc tp_compare;
-    reprfunc tp_repr;
+    cmpfunc     tp_compare;
+    reprfunc    tp_repr;
 
     /* Method suites for standard classes */
 
-    PyNumberMethods *tp_as_number;
-    PySequenceMethods *tp_as_sequence;
-    PyMappingMethods *tp_as_mapping;
+    PyNumberMethods     *tp_as_number;
+    PySequenceMethods   *tp_as_sequence;
+    PyMappingMethods    *tp_as_mapping;
 
     /* More standard operations (here for binary compatibility) */
 
-    hashfunc tp_hash;
-    ternaryfunc tp_call;                        // 该类型（对象）的自身调用处理接口（例如：type()、int()、...）
-    reprfunc tp_str;
-    getattrofunc tp_getattro;
-    setattrofunc tp_setattro;
+    hashfunc        tp_hash;
+    ternaryfunc     tp_call;                        // 该类型（对象）的自身调用处理接口（例如：type()、int()、...）
+    reprfunc        tp_str;
+    getattrofunc    tp_getattro;
+    setattrofunc    tp_setattro;
 
     /* Functions to access object as input/output buffer */
-    PyBufferProcs *tp_as_buffer;
+    PyBufferProcs   *tp_as_buffer;
 
     /* Flags to define presence of optional/expanded features */
-    long tp_flags;
+    long            tp_flags;
 
-    const char *tp_doc; /* Documentation string */
+    const char      *tp_doc; /* Documentation string */
 
     /* Assigned meaning in release 2.0 */
     /* call function for all accessible objects */
-    traverseproc tp_traverse;
+    traverseproc    tp_traverse;
 
     /* delete references to contained objects */
-    inquiry tp_clear;
+    inquiry         tp_clear;
 
     /* Assigned meaning in release 2.1 */
     /* rich comparisons */
-    richcmpfunc tp_richcompare;
+    richcmpfunc     tp_richcompare;
 
     /* weak reference enabler */
-    Py_ssize_t tp_weaklistoffset;
+    Py_ssize_t      tp_weaklistoffset;
 
     /* Added in release 2.2 */
     /* Iterators */
-    getiterfunc tp_iter;
-    iternextfunc tp_iternext;
+    getiterfunc     tp_iter;
+    iternextfunc    tp_iternext;
 
     /* Attribute descriptor and subclassing stuff */
     struct PyMethodDef *tp_methods;                 // 该类型（对象）的方法定义
@@ -387,21 +395,23 @@ typedef struct _typeobject {
                                                      * - 此外，对于自定义类（对象）来说，其对象的结构体定义为 PyClassObject，而非当前的 PyTypeObject
                                                      *   所有它根本就没有 tp_base 成员的概念
                                                      */
-    PyObject *tp_dict;                              // 该类型（对象）的数据 dict 对象
-    descrgetfunc tp_descr_get;
-    descrsetfunc tp_descr_set;
-    Py_ssize_t tp_dictoffset;
-    initproc tp_init;                               // 该类型（对象）的构造函数
-    allocfunc tp_alloc;                             // 该类型（对象）的分配一个新的实例（对象）
-    newfunc tp_new;
-    freefunc tp_free;                               /* Low-level free-memory routine */
-    inquiry tp_is_gc;                               /* For PyObject_IS_GC（该类型对象是否是动态创建的。内置类型对象、None、True、...等对象都是静态全局对象） */
-    PyObject *tp_bases;                             /* 该类型（对象）的基类集合（允许多基类继承，集合中的基类没有顺序的概念） */
-    PyObject *tp_mro;                               /* method resolution order (类方法解析顺序。也就是将 tp_bases 按类的继承关系进行排序的结果) */
-    PyObject *tp_cache;
-    PyObject *tp_subclasses;                        /* 该类型（对象）下的有所（sub）派生类的集合 */
-    PyObject *tp_weaklist;
-    destructor tp_del;
+    PyObject        *tp_dict;                              // 该类型（对象）的数据 dict 对象
+    descrgetfunc    tp_descr_get;
+    descrsetfunc    tp_descr_set;
+    Py_ssize_t      tp_dictoffset;
+    initproc        tp_init;                        // 该类型（对象）的构造函数
+    allocfunc       tp_alloc;                       // 该类型（对象）的分配一个新的实例（对象）
+    newfunc         tp_new;
+    freefunc        tp_free;                        /* Low-level free-memory routine */
+    inquiry         tp_is_gc;                       /* For PyObject_IS_GC（该类型对象是否是动态创建的。内置类型对象、None、True、...等对象都是静态全局对象） */
+
+    PyObject        *tp_bases;                      /* 该类型（对象）的基类集合（允许多基类继承，集合中的基类没有顺序的概念） */
+    PyObject        *tp_mro;                        /* method resolution order (类方法解析顺序。也就是将 tp_bases 按类的继承关系进行排序的结果) */
+    PyObject        *tp_cache;
+    PyObject        *tp_subclasses;                 /* 该类型（对象）下的有所（sub）派生类的集合 */
+
+    PyObject        *tp_weaklist;
+    destructor      tp_del;
 
     /* Type attribute cache version tag. Added in version 2.6 */
     unsigned int tp_version_tag;

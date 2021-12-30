@@ -2534,7 +2534,6 @@ PyObject_Call(PyObject *func, PyObject *arg, PyObject *kw)
         // 调用栈场景栈出栈
         Py_LeaveRecursiveCall();
 
-
         if (result == NULL && !PyErr_Occurred())
             PyErr_SetString(
                 PyExc_SystemError,

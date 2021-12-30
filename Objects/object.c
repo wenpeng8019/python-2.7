@@ -1320,19 +1320,25 @@ _PyObject_NextNotImplemented(PyObject *self)
 
 PyObject *
 _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
-{
+{   // @ PyObject_GenericGetAttr
+
+    // 获取该对象的类型（对象） 
     PyTypeObject *tp = Py_TYPE(obj);
+
     PyObject *descr = NULL;
     PyObject *res = NULL;
     descrgetfunc f;
     Py_ssize_t dictoffset;
     PyObject **dictptr;
 
+    // 验证要访问的属性命名
     if (!PyString_Check(name)){
+
 #ifdef Py_USING_UNICODE
         /* The Unicode to string conversion is done here because the
            existing tp_setattro slots expect a string object as name
            and we wouldn't want to break those. */
+        // 对 Unicode 字符串进行转换，因为 tp_setattro 接口不支持 unicode
         if (PyUnicode_Check(name)) {
             name = PyUnicode_AsEncodedString(name, NULL, NULL);
             if (name == NULL)
@@ -1350,6 +1356,7 @@ _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
     else
         Py_INCREF(name);
 
+    // 确保该对象的类型（对象）完成 ready 初始化处理
     if (tp->tp_dict == NULL) {
         if (PyType_Ready(tp) < 0)
             goto done;
@@ -1381,26 +1388,42 @@ _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
         }
     }
 #else
+    // 根据 class/type 的继承性，获取类/类型定义的 name 项
     descr = _PyType_Lookup(tp, name);
 #endif
-
     Py_XINCREF(descr);
 
     f = NULL;
+
+    // 如果得到的类/类型定义的 name 项（即 descr）的数据类型，具有类的特性
+    // + 说明该 name 项是个 getter/setter 对象
     if (descr != NULL &&
         PyType_HasFeature(descr->ob_type, Py_TPFLAGS_HAVE_CLASS)) {
+
+        // 获取 descr 的 getter 处理接口
         f = descr->ob_type->tp_descr_get;
+
+        // 如果 descr 同时存在 setter 处理接口，则直接用 descr 的 getter 处理接口来返回 name 项目
         if (f != NULL && PyDescr_IsData(descr)) {
+
             res = f(descr, obj, (PyObject *)obj->ob_type);
             Py_DECREF(descr);
+
             goto done;
         }
     }
 
+    /// 从该对象的数据 dict 中获取 name 项
+
+    // 如果参数中没有指定该对象的数据 dict
+    // + 通过该对象的 GetDictPtr 接口来自动获取数据 dict
     if (dict == NULL) {
+
         /* Inline _PyObject_GetDictPtr */
+        // 如果该对象存在数据 dict
         dictoffset = tp->tp_dictoffset;
         if (dictoffset != 0) {
+
             if (dictoffset < 0) {
                 Py_ssize_t tsize;
                 size_t size;
@@ -1414,12 +1437,17 @@ _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
                 assert(dictoffset > 0);
                 assert(dictoffset % SIZEOF_VOID_P == 0);
             }
+
+            // 获取该对象的数据 dict
             dictptr = (PyObject **) ((char *)obj + dictoffset);
             dict = *dictptr;
         }
     }
+    // 如果该对象存在数据 dict
     if (dict != NULL) {
         Py_INCREF(dict);
+
+        // 获取数据 dict 中的 name 项
         res = PyDict_GetItem(dict, name);
         if (res != NULL) {
             Py_INCREF(res);
@@ -1430,6 +1458,7 @@ _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
         Py_DECREF(dict);
     }
 
+    // 如果存在类/类型定义的 name 项，由类/类型定义的 name 项来处理
     if (f != NULL) {
         res = f(descr, obj, (PyObject *)Py_TYPE(obj));
         Py_DECREF(descr);

@@ -540,6 +540,9 @@ PyClass_IsSubclass(PyObject *klass, PyObject *base)
     return 0;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// Instance 类型（对象）
+///////////////////////////////////////////////////////////////////////////////
 
 /* Instance objects */
 
@@ -679,6 +682,7 @@ instance_new(PyTypeObject* type, PyObject* args, PyObject *kw)
               "instance() second arg must be dictionary or None");
         return NULL;
     }
+
     return PyInstance_NewRaw(klass, dict);
 }
 
@@ -2166,20 +2170,27 @@ instance_iternext(PyInstanceObject *self)
     return NULL;
 }
 
+// instance 类型（对象）的自调用处理
+// + 执行的是 instance 类型（对象）的实例（对象）的 __call__ 处理。
+//   __call__ 默认绑定的是 instance 类型（对象）的
 static PyObject *
 instance_call(PyObject *func, PyObject *arg, PyObject *kw)
 {
+    // 获取 instance 类型（对象）的实例（对象）的 __call__ 成员
     PyObject *res, *call = PyObject_GetAttrString(func, "__call__");
     if (call == NULL) {
+
         PyInstanceObject *inst = (PyInstanceObject*) func;
         if (!PyErr_ExceptionMatches(PyExc_AttributeError))
             return NULL;
+
         PyErr_Clear();
         PyErr_Format(PyExc_AttributeError,
                      "%.200s instance has no __call__ method",
                      PyString_AsString(inst->in_class->cl_name));
         return NULL;
     }
+
     /* We must check and increment the recursion depth here. Scenario:
            class A:
            pass
@@ -2192,7 +2203,10 @@ instance_call(PyObject *func, PyObject *arg, PyObject *kw)
         res = NULL;
     }
     else {
+
+        // 执行 __call__ 处理
         res = PyObject_Call(call, arg, kw);
+
         Py_LeaveRecursiveCall();
     }
     Py_DECREF(call);
@@ -2284,6 +2298,9 @@ PyTypeObject PyInstance_Type = {
     instance_new,                               /* tp_new */
 };
 
+///////////////////////////////////////////////////////////////////////////////
+// instance method 类型（对象）
+///////////////////////////////////////////////////////////////////////////////
 
 /* Instance method objects are used for two purposes:
    (a) as bound instance methods (returned by instancename.methodname)
@@ -2291,9 +2308,14 @@ PyTypeObject PyInstance_Type = {
    In case (b), im_self is NULL
 */
 
+// 定义（创建）一个自定义类（对象）的成员函数。
+// + 这里创建的类函数，既可以是类实例（对象）的方法，也可以是类方法。
+//   二者通过 im_self 是否为 NULL 来区分
 PyObject *
 PyMethod_New(PyObject *func, PyObject *self, PyObject *klass)
-{
+{   // @ instancemethod_new
+    // @ instancemethod_descr_get
+
     register PyMethodObject *im;
     im = free_list;
     if (im != NULL) {
