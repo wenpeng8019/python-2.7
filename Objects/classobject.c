@@ -24,11 +24,12 @@ static PyObject *instance_getattr2(PyInstanceObject *, PyObject *);
 
 static PyObject *getattrstr, *setattrstr, *delattrstr;
 
-// 创建一个 type 类型为 class 的对象（class 对象）
+// 定义（创建）一个（原生数据类型为 class 类型的）自定义类（对象），即 class 对象
 PyObject *
 PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
      /* bases is NULL or tuple of classobjects! */
-{
+{   // @ class_new
+
     PyClassObject *op, *dummy;
     static PyObject *docstr, *modstr, *namestr;
 
@@ -87,7 +88,10 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
         if (bases == NULL)
             return NULL;
     }
-    else {
+    else { 
+        
+        /// 验证基类的有效性
+
         Py_ssize_t i, n;
         PyObject *base;
         if (!PyTuple_Check(bases)) {
@@ -95,24 +99,34 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
                             "PyClass_New: bases must be a tuple");
             return NULL;
         }
+
+        // 遍历所有的基类
         n = PyTuple_Size(bases);
         for (i = 0; i < n; i++) {
             base = PyTuple_GET_ITEM(bases, i);
+
+            // 如果基类的 type 类型不是 class 类型
+            // + 此时，如果基类的 type 类型（对象）可调用，则该基类会被视为是 metatype
             if (!PyClass_Check(base)) {
+
+                // 由该（首次出现的）metatype 类型来负责创建该自定义类的实例对象
                 if (PyCallable_Check(
                     (PyObject *) base->ob_type))
+
                     return PyObject_CallFunctionObjArgs(
                         (PyObject *) base->ob_type,
                         name, bases, dict, NULL);
+
                 PyErr_SetString(PyExc_TypeError,
                     "PyClass_New: base must be a class");
+
                 return NULL;
             }
         }
         Py_INCREF(bases);
     }
 
-    /// 初始化静态字符串常量："__getattr__"、"__setattr__"、"__delattr__"
+    // 初始化静态字符串常量："__getattr__"、"__setattr__"、"__delattr__"
     if (getattrstr == NULL) {
         getattrstr = PyString_InternFromString("__getattr__");
         if (getattrstr == NULL)
@@ -125,7 +139,7 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
             goto alloc_error;
     }
 
-    // 创建 class 对象
+    // 创建自定义类（对象）
     // + 该类对象的 type 类型为 PyClass_Type
     op = PyObject_GC_New(PyClassObject, &PyClass_Type);
     if (op == NULL) {
@@ -134,14 +148,19 @@ alloc_error:
         return NULL;
     }
 
-    // 设定 class 的基类
+    // 设置该自定义类（对象）的基类（对象集合）
+    // + 这里的基类 bases，要么是自定义类（对象），要么是 object 类型（对象）
+    //   这里 cl_bases 属性，是 PyClassObject 的属性，不是 PyTypeObject 的 tp_bases 属性
     op->cl_bases = bases;
+
+    // 设置该自定义类（对象）的 dict 数据对象
     Py_INCREF(dict);
-    // 设定 class 的属性 dict 对象
     op->cl_dict = dict;
+
+    // 设置该自定义类（对象）的 name
     Py_XINCREF(name);
-    // 设定 class 的 name
     op->cl_name = name;
+
     op->cl_weakreflist = NULL;
 
     op->cl_getattr = class_lookup(op, getattrstr, &dummy);
@@ -201,6 +220,7 @@ class_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "SOO", kwlist,
                                      &name, &bases, &dict))
         return NULL;
+
     return PyClass_New(bases, dict, name);
 }
 
@@ -473,12 +493,12 @@ PyTypeObject PyClass_Type = {
     (getattrofunc)class_getattr,                /* tp_getattro */
     (setattrofunc)class_setattr,                /* tp_setattro */
     0,                                          /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,/* tp_flags */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,    /* tp_flags */
     class_doc,                                  /* tp_doc */
     (traverseproc)class_traverse,               /* tp_traverse */
     0,                                          /* tp_clear */
     0,                                          /* tp_richcompare */
-    offsetof(PyClassObject, cl_weakreflist), /* tp_weaklistoffset */
+    offsetof(PyClassObject, cl_weakreflist),    /* tp_weaklistoffset */
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
     0,                                          /* tp_methods */
@@ -523,6 +543,7 @@ PyClass_IsSubclass(PyObject *klass, PyObject *base)
 
 /* Instance objects */
 
+// 创建一个类实例对象
 PyObject *
 PyInstance_NewRaw(PyObject *klass, PyObject *dict)
 {   // @ extern
@@ -531,7 +552,8 @@ PyInstance_NewRaw(PyObject *klass, PyObject *dict)
 
     PyInstanceObject *inst;
 
-    // 验证 klass 的 type 类型为 class 
+    // 验证 klass 的 type 类型为 class
+    // + 只有 class 类型，才可以创建类实例对象
     if (!PyClass_Check(klass)) {
         PyErr_BadInternalCall();
         return NULL;
@@ -551,7 +573,7 @@ PyInstance_NewRaw(PyObject *klass, PyObject *dict)
         Py_INCREF(dict);
     }
 
-    // 动态创建一个实例对象
+    // 动态创建一个类实例对象
     // + 该实例对象的 type 类型为 PyInstance_Type
     inst = PyObject_GC_New(PyInstanceObject, &PyInstance_Type);
     if (inst == NULL) {

@@ -380,7 +380,13 @@ typedef struct _typeobject {
     struct PyMethodDef *tp_methods;                 // 该类型（对象）的方法定义
     struct PyMemberDef *tp_members;                 // 该类型（对象）的成员定义
     struct PyGetSetDef *tp_getset;                  // 该类型（对象）的 getter/setter 属性访问接口
-    struct _typeobject *tp_base;                    // 该类型（对象）的（直接）基类型
+    struct _typeobject *tp_base;                    /* 该类型（对象）的（直接）基类型
+                                                     * 注意，这是类型（对象）的基类，不是（type 类型为 class 的）自定义类（对象）的基类
+                                                     * - 首先，type 类型为 class 的自定义类（对象），并不是一个类型（对象），只有 type 类型为 type 的对象，才是一个类型（对象）
+                                                     *   实际上，自定义类（对象）在本质上是一个类型（对象）的实例对象，而这个类型（对象），则是内置的 class 类型（对象）
+                                                     * - 此外，对于自定义类（对象）来说，其对象的结构体定义为 PyClassObject，而非当前的 PyTypeObject
+                                                     *   所有它根本就没有 tp_base 成员的概念
+                                                     */
     PyObject *tp_dict;                              // 该类型（对象）的数据 dict 对象
     descrgetfunc tp_descr_get;
     descrsetfunc tp_descr_set;
@@ -560,6 +566,13 @@ Py_TPFLAGS_HAVE_VERSION_TAG; outside the core, it doesn't.  This is so
 that extensions that modify tp_dict of their own types directly don't
 break, since this was allowed in 2.5.  In 3.0 they will have to
 manually remove this flag though!
+
+ ! 这里定义的特征，只针对于 type 类型（对象），也就是 PyTypeObject 对象的 tp_flags 成员项
+   其他类型对象，不存在该特征。尤其需要注意和区分的是
+   - 自定义类（对象），即 PyClassObject 对象。
+     它的 type 类型为 class 类型（对象），也就是 PyClass_Type
+   - 自定义类（对象）的实例（对象），即 PyInstanceObject 对象。
+     它的 type 类型为 instance 类型（对象），也就是 PyInstance_Type
 */
 
 /* PyBufferProcs contains bf_getcharbuffer */
@@ -588,12 +601,21 @@ manually remove this flag though!
 #define Py_TPFLAGS_HAVE_ITER (1L<<7)
 
 /* New members introduced by Python 2.2 exist */
+// 该类型是否是一个具有 class 特性的类型
+// + 也就是是否支持构造、析构、类属性、基类、继承等特性
+//   事实上，基本上所有的类型都支持该特性，它被作为下面 Py_TPFLAGS_DEFAULT 的一个默认项
 #define Py_TPFLAGS_HAVE_CLASS (1L<<8)
 
 /* Set if the type object is dynamically allocated */
+// 该类型是否是动态创建的类型（对象）
+// + 目前，只有通过对 type 类型（对象）的自调用的方式，才能动态创建一个类型（对象）
 #define Py_TPFLAGS_HEAPTYPE (1L<<9)
 
 /* Set if the type allows subclassing */
+// 该类型是否可以作为基类被派生。一般来说，
+// - 用于具象的描述某个数据结构的内置类型（对象）都是可作为基类。例如：int、float、string、dict、...
+// - 而用于抽象的描述某类组件、设备的内置类型（对象）是不可作为基类的。例如：PyClass_Type(class)、PyInstance_Type(instance)、...
+// ! 由 type 类型（对象）的自调用的方式动态创建的类型（对象），默认是具有该特征的
 #define Py_TPFLAGS_BASETYPE (1L<<10)
 
 /* Set if the type is 'ready' -- fully initialized */

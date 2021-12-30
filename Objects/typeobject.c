@@ -1712,7 +1712,9 @@ mro_internal(PyTypeObject *type)
 
 static PyTypeObject *
 best_base(PyObject *bases)
-{
+{   // @ type_new
+    // @ type_set_bases
+
     Py_ssize_t i, n;
     PyTypeObject *base, *winner, *candidate, *base_i;
     PyObject *base_proto;
@@ -1724,30 +1726,42 @@ best_base(PyObject *bases)
     winner = NULL;
     for (i = 0; i < n; i++) {
         base_proto = PyTuple_GET_ITEM(bases, i);
+
+        // 如果 base 的 type 类型为 class
         if (PyClass_Check(base_proto))
             continue;
+
+        // 验证 base 的 type 类型要么是 class，要么必须是 type
         if (!PyType_Check(base_proto)) {
             PyErr_SetString(
                 PyExc_TypeError,
                 "bases must be types");
             return NULL;
         }
+
+        // 确保完成 ready 处理
         base_i = (PyTypeObject *)base_proto;
         if (base_i->tp_dict == NULL) {
             if (PyType_Ready(base_i) < 0)
                 return NULL;
         }
+
         candidate = solid_base(base_i);
+
+        // 对于第一个 type 类型（对象）
         if (winner == NULL) {
             winner = candidate;
             base = base_i;
         }
+        // 如果候选（winner）类型（对象）是派生类，则继续使用候选类型（对象）
         else if (PyType_IsSubtype(winner, candidate))
             ;
+        // 如果当前（遍历项）类型（对象）是派生类，则将当前类型（对象）作为候选
         else if (PyType_IsSubtype(candidate, winner)) {
             winner = candidate;
             base = base_i;
         }
+        // 类型继承关系不一致冲突
         else {
             PyErr_SetString(
                 PyExc_TypeError,
@@ -2072,7 +2086,7 @@ type_init(PyObject *cls, PyObject *args, PyObject *kwds)
 
 // type 类型（对象）（在自调用时）创建自己的（类型实例）对象
 // + type 类型（对象）是个特殊的类型，它在逻辑上相当于一个类厂对象
-//   即它创建的（类型实例）对象应该是一个 type 类型为 type 的类型（对象）
+//   即它创建的（类型实例）对象应该是一个类型（对象），即它的 type 类型为 type 类型（对象）
 static PyObject *
 type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
 {
@@ -2191,6 +2205,7 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
         Py_DECREF(bases);
         return NULL;
     }
+    // 验证该类型可以作为基类被派生
     if (!PyType_HasFeature(base, Py_TPFLAGS_BASETYPE)) {
         PyErr_Format(PyExc_TypeError,
                      "type '%.100s' is not an acceptable base type",
@@ -2358,7 +2373,12 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
     /// 动态创建一个 type 类型（对象）
 
     /* Allocate the type object */
-    // 这里的 metatype 就是 type 对象
+    // 创建一个原生数据类型对象 PyTypeObject，且它（自身）的原生数据类型为 metatype
+    // ! 这里可能会有一个小“困惑”
+    //   + 这里的 metatype 很可能就是 type 对象，而初始定义时，PyType_Type 的 tp_alloc 属性为 null，那么这里是如何调用的
+    //     事实上，所有原生数据类型对象，即 PyTypeObject，其在执行初始化 ready 处理后，
+    //     都会默认从 PyBaseObject_Type 类型（对象）继承，这也包括 PyType_Type 类型（对象）。
+    //     因此执行完 ready 初始化后的 PyType_Type 类型（对象），其 tp_alloc 成员，实际上是指向 PyBaseObject_Type 的 tp_alloc 成员的
     type = (PyTypeObject *)metatype->tp_alloc(metatype, nslots);
     if (type == NULL) {
         Py_XDECREF(slots);
@@ -2368,13 +2388,22 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
 
     /* Keep name and slots alive in the extended type object */
     et = (PyHeapTypeObject *)type;
+
+    // 设置该类型（对象）的命名
     Py_INCREF(name);
     et->ht_name = name;
+
+    // 设置该类型（对象）的接口槽
     et->ht_slots = slots;
 
     /* Initialize tp_flags */
+    // 初始化该类型（对象）的 flags 特征
+    // + 在默认类型特征的基础上，增加了 
+    //   - 动态类型特征
+    //   - 且允许对该类型进行派生
     type->tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HEAPTYPE |
         Py_TPFLAGS_BASETYPE;
+    // 从基类型中继承相关的特征
     if (base->tp_flags & Py_TPFLAGS_HAVE_GC)
         type->tp_flags |= Py_TPFLAGS_HAVE_GC;
     if (base->tp_flags & Py_TPFLAGS_HAVE_NEWBUFFER)
@@ -2394,18 +2423,23 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
     type->tp_name = PyString_AS_STRING(name);
 
     /* Set tp_base and tp_bases */
+    // 初始化该类型（对象）的基类型
     type->tp_bases = bases;
     Py_INCREF(base);
     type->tp_base = base;
 
     /* Initialize tp_dict from passed-in dict */
+    // 初始化该类型的数据对象
     type->tp_dict = dict = PyDict_Copy(dict);
     if (dict == NULL) {
         Py_DECREF(type);
         return NULL;
     }
 
+    /// 初始化该类型（对象）的默认属性程序
+
     /* Set __module__ in the dict */
+    // 初始化设置该类型（对象）所属的 module
     if (PyDict_GetItemString(dict, "__module__") == NULL) {
         tmp = PyEval_GetGlobals();
         if (tmp != NULL) {
@@ -2422,6 +2456,7 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
        and is a string.  The __doc__ accessor will first look for tp_doc;
        if that fails, it will still look into __dict__.
     */
+    // 初始化设置该类型（对象）的 doc 信息
     {
         PyObject *doc = PyDict_GetItemString(dict, "__doc__");
         if (doc != NULL && PyString_Check(doc)) {
@@ -2438,8 +2473,11 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
 
     /* Special-case __new__: if it's a plain function,
        make it a static function */
+    // 初始化该类型（对象）的 new 处理接口
+    // + 如果该处理接口是由 Python 语言（环境）定义的，则将其转换为 C 静态函数
     tmp = PyDict_GetItemString(dict, "__new__");
     if (tmp != NULL && PyFunction_Check(tmp)) {
+
         tmp = PyStaticMethod_New(tmp);
         if (tmp == NULL) {
             Py_DECREF(type);
@@ -2448,6 +2486,8 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
         PyDict_SetItemString(dict, "__new__", tmp);
         Py_DECREF(tmp);
     }
+
+    /// 处理自定义指定的 slots 接口
 
     /* Add descriptors for custom slots from __slots__, or for __dict__ */
     mp = PyHeapType_GET_MEMBERS(et);
@@ -2506,6 +2546,7 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
         type->tp_flags |= Py_TPFLAGS_HAVE_GC;
 
     /* Always override allocation strategy to use regular heap */
+    // 重载内存分配策略，默认使用通用的堆内存分配策略
     type->tp_alloc = PyType_GenericAlloc;
     if (type->tp_flags & Py_TPFLAGS_HAVE_GC) {
         type->tp_free = PyObject_GC_Del;
@@ -2516,6 +2557,7 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
         type->tp_free = PyObject_Del;
 
     /* Initialize the rest */
+    // 执行 ready 动态初始化处理
     if (PyType_Ready(type) < 0) {
         Py_DECREF(type);
         return NULL;
@@ -2956,6 +2998,8 @@ object_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (err < 0)
         return NULL;
 
+    // 对于抽象数据类型，禁止执行 new 操作
+    // + 这里会执行报错处理
     if (type->tp_flags & Py_TPFLAGS_IS_ABSTRACT) {
         static PyObject *comma = NULL;
         PyObject *abstract_methods = NULL;
@@ -3005,6 +3049,8 @@ object_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         Py_XDECREF(abstract_methods);
         return NULL;
     }
+
+    // 默认直接执行 alloc 处理
     return type->tp_alloc(type, 0);
 }
 
@@ -4825,7 +4871,8 @@ wrap_init(PyObject *self, PyObject *args, void *wrapped, PyObject *kwds)
 
 static PyObject *
 tp_new_wrapper(PyObject *self, PyObject *args, PyObject *kwds)
-{
+{   // @ tp_new_methoddef.__new__
+
     PyTypeObject *type, *subtype, *staticbase;
     PyObject *arg0, *res;
 
@@ -4877,7 +4924,9 @@ tp_new_wrapper(PyObject *self, PyObject *args, PyObject *kwds)
     args = PyTuple_GetSlice(args, 1, PyTuple_GET_SIZE(args));
     if (args == NULL)
         return NULL;
+
     res = type->tp_new(subtype, args, kwds);
+
     Py_DECREF(args);
     return res;
 }
@@ -4891,9 +4940,11 @@ static struct PyMethodDef tp_new_methoddef[] = {
 
 static int
 add_tp_new_wrapper(PyTypeObject *type)
-{
+{   // @ add_operators
+
     PyObject *func;
 
+    // 如果（之前）已经有 __new__ 项，则直接返回
     if (PyDict_GetItemString(type->tp_dict, "__new__") != NULL)
         return 0;
     func = PyCFunction_New(tp_new_methoddef, (PyObject *)type);
@@ -6474,7 +6525,8 @@ recurse_down_subclasses(PyTypeObject *type, PyObject *name,
 
 static int
 add_operators(PyTypeObject *type)
-{
+{   // @ PyType_Ready
+
     PyObject *dict = type->tp_dict;
     slotdef *p;
     PyObject *descr;
@@ -6484,11 +6536,14 @@ add_operators(PyTypeObject *type)
     for (p = slotdefs; p->name; p++) {
         if (p->wrapper == NULL)
             continue;
+
         ptr = slotptr(type, p->offset);
         if (!ptr || !*ptr)
             continue;
+
         if (PyDict_GetItem(dict, p->name_strobj))
             continue;
+
         if (*ptr == PyObject_HashNotImplemented) {
             /* Classes may prevent the inheritance of the tp_hash
                slot by storing PyObject_HashNotImplemented in it. Make it
@@ -6505,6 +6560,8 @@ add_operators(PyTypeObject *type)
             Py_DECREF(descr);
         }
     }
+
+    // 将内置数据类型（对象）的 tp_new 接口，封装作为可被 Python 语言访问的 __new__ 接口
     if (type->tp_new != NULL) {
         if (add_tp_new_wrapper(type) < 0)
             return -1;
