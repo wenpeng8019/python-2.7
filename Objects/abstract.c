@@ -2522,6 +2522,7 @@ PyObject_Call(PyObject *func, PyObject *arg, PyObject *kw)
 {
     ternaryfunc call;
 
+    // 获取（可调用）实例（对象）`func` 的数据类型（对象）定义的 `tp_call` 接口
     if ((call = func->ob_type->tp_call) != NULL) {
         PyObject *result;
 
@@ -2529,6 +2530,7 @@ PyObject_Call(PyObject *func, PyObject *arg, PyObject *kw)
         if (Py_EnterRecursiveCall(" while calling a Python object"))
             return NULL;
 
+        // 触发执行 `tp_call` 处理
         result = (*call)(func, arg, kw);
         
         // 调用栈场景栈出栈

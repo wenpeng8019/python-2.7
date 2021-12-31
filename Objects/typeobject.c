@@ -2603,6 +2603,8 @@ _PyType_Lookup(PyTypeObject *type, PyObject *name)
     n = PyTuple_GET_SIZE(mro);
     for (i = 0; i < n; i++) {
         base = PyTuple_GET_ITEM(mro, i);
+
+        // 如果 base 
         if (PyClass_Check(base))
             dict = ((PyClassObject *)base)->cl_dict;
         else {
@@ -6674,7 +6676,7 @@ add_operators(PyTypeObject *type)
         else {
 
             // （基于 slotdef 项）创建一个 PyWrapperDescrObject 对象
-            descr = PyDescr_NewWrapper(type, p, *ptr);
+            descr = PyDescr_NewWrapper(type/*  */, p, *ptr/* callback_data */);
             if (descr == NULL)
                 return -1;
 

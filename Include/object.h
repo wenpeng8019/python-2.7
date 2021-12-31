@@ -344,7 +344,31 @@ typedef struct _typeobject {
     /* More standard operations (here for binary compatibility) */
 
     hashfunc            tp_hash;
-    ternaryfunc         tp_call;                        // 该类型（对象）的自身调用处理接口（例如：type()、int()、...）
+    ternaryfunc         tp_call;                        /* 对该数据类型（对象）的实例（对象）的调用处理接口
+                                                         * 此时说明该实例（对象）是可被调用的。
+                                                         * - 例如，函数/方法类型（对象）的实例（对象），也就是一个函数/方法实例
+                                                         *   此时，调用函数/方法实例，就是执行它
+                                                         * - 再如，数据类型（对象）`type` 的实例（对象），也就是一个数据类型（对象）自身
+                                                         *   ! 数据类型（对象）`type` 是个特殊的数据类型（对象）
+                                                         *     逻辑上它是数据类型（对象）的数据类型（对象），即是个类厂
+                                                         *     对应的它的实例（对象），也是数据类型（对象）
+                                                         *   + 数据类型（对象）自身的调用，可用来创建该数据类型（对象）的实例对象
+                                                         *     如：int()、float()、str()、...
+                                                         * - 还有，数据类型（对象）`class` 的实例（对象），也就是一个自定义类（对象）
+                                                         *   和数据类型（对象）一样，对类（对象）的调用，也被用来创建自定义类（对象）的实例（对象）
+                                                         * - ...
+                                                         * + 该接口方法对于该数据类型（对象）说，相当于一个 {类的成员函数}
+                                                         *   也就是说，它处理的目标是该数据类型（对象）的实例（对象）
+                                                         * + 关于该接口的参数定义
+                                                         *   - inst-obj(this): PyObject
+                                                         *     + 被调用的（该数据类型的）实例（对象），相当于 {类的成员函数} 的 this 指针
+                                                         *   - arg: PyObject
+                                                         *     通用 args 入参
+                                                         *   - kw: PyObject
+                                                         *     通用 kw 类型入参
+                                                         * + 调用该接口的主要场景
+                                                         *   - @ PyObject_Call() $ [abstract.c]
+                                                         */
     reprfunc            tp_str;
     getattrofunc        tp_getattro;
     setattrofunc        tp_setattro;
@@ -387,8 +411,13 @@ typedef struct _typeobject {
                                                      * - 此外，对于自定义类（对象）来说，其对象的结构体定义为 PyClassObject，而非当前的 PyTypeObject
                                                      *   所有它根本就没有 tp_base 成员的概念
                                                      */
-    PyObject        *tp_dict;                       // 该类型（对象）的数据 dict 对象
-    descrgetfunc    tp_descr_get;
+    PyObject        *tp_dict;                       /* 该类型（对象）的数据 dict 对象 */
+    descrgetfunc    tp_descr_get;                   /* 访问该数据类型（对象）的实例（对象）的值
+                                                     * 此时，该实例（对象）往往就代表一个值。例如：一个数值型实例（对象）
+                                                     * 而这里在访问这个实例（对象）时，往往就是访问这个值。
+                                                     * ! tp_getattr 接口的区分在于
+                                                     *   tp_getattr 访问的是这个实例（对象）的某个属性，而非它的值
+                                                     */
     descrsetfunc    tp_descr_set;
     Py_ssize_t      tp_dictoffset;
     initproc        tp_init;                        // 该类型（对象）的构造函数

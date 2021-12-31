@@ -3,6 +3,11 @@
 #include "Python.h"
 #include "structmember.h" /* Why is this not included in Python.h? */
 
+///////////////////////////////////////////////////////////////////////////////
+// 数据类型（对象）`PyWrapperDescr_Type`、`PyMemberDescr_Type`、`PyGetSetDescr_Type`，以及 `PyMethodDescr_Type`、`PyClassMethodDescr_Type` 的定义
+// 其中 `PyMethodDescr_Type`、`PyClassMethodDescr_Type` 是静态私有类型
+///////////////////////////////////////////////////////////////////////////////
+
 static void
 descr_dealloc(PyDescrObject *descr)
 {
@@ -27,6 +32,8 @@ descr_repr(PyDescrObject *descr, char *format)
     return PyString_FromFormat(format, descr_name(descr),
                                descr->d_type->tp_name);
 }
+
+//-----------------------------------------------------------------------------
 
 static PyObject *
 method_repr(PyMethodDescrObject *descr)
@@ -76,6 +83,8 @@ descr_check(PyDescrObject *descr, PyObject *obj, PyObject **pres)
     }
     return 0;
 }
+
+//-----------------------------------------------------------------------------
 
 static PyObject *
 classmethod_get(PyMethodDescrObject *descr, PyObject *obj, PyObject *type)
@@ -158,6 +167,7 @@ wrapperdescr_get(PyWrapperDescrObject *descr, PyObject *obj, PyObject *type)
 
     if (descr_check((PyDescrObject *)descr, obj, &res))
         return res;
+        
     return PyWrapper_New((PyObject *)descr, obj);
 }
 
@@ -267,7 +277,8 @@ classmethoddescr_call(PyMethodDescrObject *descr, PyObject *args,
 
 static PyObject *
 wrapperdescr_call(PyWrapperDescrObject *descr, PyObject *args, PyObject *kwds)
-{
+{   // @ PyWrapperDescr_Type.tp_call
+
     Py_ssize_t argc;
     PyObject *self, *func, *result;
 
@@ -571,13 +582,16 @@ PyTypeObject PyWrapperDescr_Type = {
 
 static PyDescrObject *
 descr_new(PyTypeObject *descrtype, PyTypeObject *type, const char *name)
-{
+{   // @ PyDescr_NewWrapper
+
     PyDescrObject *descr;
 
     descr = (PyDescrObject *)PyType_GenericAlloc(descrtype, 0);
     if (descr != NULL) {
+
         Py_XINCREF(type);
         descr->d_type = type;
+
         descr->d_name = PyString_InternFromString(name);
         if (descr->d_name == NULL) {
             Py_DECREF(descr);
@@ -636,10 +650,12 @@ PyDescr_NewGetSet(PyTypeObject *type, PyGetSetDef *getset)
 }
 
 PyObject *
-PyDescr_NewWrapper(PyTypeObject *type, struct wrapperbase *base, void *wrapped)
+PyDescr_NewWrapper(PyTypeObject *type, struct wrapperbase *base, void *wrapped/* callback_data */)
 {
     PyWrapperDescrObject *descr;
 
+    // 创建一个数据类型（对象）`PyWrapperDescr_Type` 的实例（对象）
+    // + 并对 type 和 base->name 进行 wrapper
     descr = (PyWrapperDescrObject *)descr_new(&PyWrapperDescr_Type,
                                              type, base->name);
     if (descr != NULL) {
@@ -649,6 +665,9 @@ PyDescr_NewWrapper(PyTypeObject *type, struct wrapperbase *base, void *wrapped)
     return (PyObject *)descr;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// 数据类型（对象）`PyDictProxy_Type` 的定义
+///////////////////////////////////////////////////////////////////////////////
 
 /* --- Readonly proxy for dictionaries (actually any mapping) --- */
 
@@ -898,8 +917,8 @@ PyDictProxy_New(PyObject *dict)
 
 typedef struct {
     PyObject_HEAD
-    PyWrapperDescrObject *descr;
-    PyObject *self;
+    PyWrapperDescrObject *descr;                    // 数据类型（对象）`PyWrapperDescr_Type` 的实例（对象）
+    PyObject *self;                                 // 实例（对象）`PyWrapperDescrObject` 所属的对象
 } wrapperobject;
 
 static void
@@ -990,13 +1009,18 @@ static PyGetSetDef wrapper_getsets[] = {
     {0}
 };
 
+// 数据类型（对象）`wrappertype` 定义的 tp_call 接口实现
 static PyObject *
 wrapper_call(wrapperobject *wp, PyObject *args, PyObject *kwds)
-{
+{   // @ wrappertype.tp_call
+
+    // 获取被 wrapper 的实际处理接口
     wrapperfunc wrapper = wp->descr->d_base->wrapper;
+    // 获取被 wrapper 的实际目标对象
     PyObject *self = wp->self;
 
     if (wp->descr->d_base->flags & PyWrapperFlag_KEYWORDS) {
+
         wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
         return (*wk)(self, args, wp->descr->d_wrapped, kwds);
     }
@@ -1007,7 +1031,8 @@ wrapper_call(wrapperobject *wp, PyObject *args, PyObject *kwds)
                      wp->descr->d_base->name);
         return NULL;
     }
-    return (*wrapper)(self, args, wp->descr->d_wrapped);
+
+    return (*wrapper)(self, args, wp->descr->d_wrapped/* callback_data */);
 }
 
 static int
@@ -1040,7 +1065,7 @@ static PyTypeObject wrappertype = {
     PyObject_GenericGetAttr,                    /* tp_getattro */
     0,                                          /* tp_setattro */
     0,                                          /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC, /* tp_flags */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,    /* tp_flags */
     0,                                          /* tp_doc */
     wrapper_traverse,                           /* tp_traverse */
     0,                                          /* tp_clear */

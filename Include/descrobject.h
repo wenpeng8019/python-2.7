@@ -64,7 +64,7 @@ typedef struct {
 typedef struct {
     PyDescr_COMMON;
     struct wrapperbase *d_base;
-    void *d_wrapped; /* This can be any function pointer */
+    void *d_wrapped; /* This can be any function pointer (callback_data) */
 } PyWrapperDescrObject;
 
 PyAPI_DATA(PyTypeObject) PyWrapperDescr_Type;

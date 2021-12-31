@@ -1317,12 +1317,18 @@ _PyObject_NextNotImplemented(PyObject *self)
 }
 
 /* Generic GetAttr functions - put these in your tp_[gs]etattro slot */
-
+// 获取指定实例（对象）的 attr 属性的通用（默认）实现
+// 一般会将它作为数据类型（对象）的 tp_getattro slot（接口）的实现。
+// 此外，也可以直接调用该接口，用以实现相同的功能和目的
+// + 关于参数
+//   - `obj`
+//     + 目标实例（对象），也就是要获取它的 attr 属性
+//       当作为数据类型（对象）的 tp_getattro slot（接口）时，该参数就相当于 this 指针
 PyObject *
 _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
 {   // @ PyObject_GenericGetAttr
 
-    // 获取该对象的类型（对象） 
+    // 获取该实例（对象）的数据类型（对象） 
     PyTypeObject *tp = Py_TYPE(obj);
 
     PyObject *descr = NULL;
@@ -1331,7 +1337,7 @@ _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
     Py_ssize_t dictoffset;
     PyObject **dictptr;
 
-    // 验证要访问的属性命名
+    // 验证要访问的 attr 属性命名
     if (!PyString_Check(name)){
 
 #ifdef Py_USING_UNICODE
@@ -1356,7 +1362,7 @@ _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
     else
         Py_INCREF(name);
 
-    // 确保该对象的类型（对象）完成 ready 初始化处理
+    // 确保该实例（对象）的数据类型（对象）完成 ready 初始化处理
     if (tp->tp_dict == NULL) {
         if (PyType_Ready(tp) < 0)
             goto done;
@@ -1388,22 +1394,27 @@ _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
         }
     }
 #else
-    // 根据 class/type 的继承性，获取类/类型定义的 name 项
+    // 根据数据类型（对象）的继承性，获取 {数据类型（对象）的 name 定义项}
     descr = _PyType_Lookup(tp, name);
 #endif
     Py_XINCREF(descr);
 
     f = NULL;
 
-    // 如果得到的类/类型定义的 name 项（即 descr）的数据类型，具有类的特性
-    // + 说明该 name 项是个 getter/setter 对象
+    // 如果得到的 {数据类型（对象）的 name 定义项}，是（某个数据类型的）实例（对象）
+    // + 那么，{数据类型（对象）的 name 定义项} 就是一个 descriptor（对象）
+    //   此时，该 descriptor 对象，重载并定义了对该数据类型（对象）的实例（对象）的 name 属性的访问
     if (descr != NULL &&
         PyType_HasFeature(descr->ob_type, Py_TPFLAGS_HAVE_CLASS)) {
 
-        // 获取 descr 的 getter 处理接口
+        // 获取 descr 的 tp_descr_get 处理接口
         f = descr->ob_type->tp_descr_get;
 
-        // 如果 descr 同时存在 setter 处理接口，则直接用 descr 的 getter 处理接口来返回 name 项目
+        // 如果 descr 同时存在 tp_descr_set 处理接口，也就是 descr 是可读写的
+        // + 此时直接用 descr 的 tp_descr_get 处理接口来返回相应的值
+        // - 如果 descr 是可读写的，那么对 name 的读写，就都由 descr 来负责，也就是写入的数据会保存到 descr
+        // - 如果 descr 只读时，那么对 name 的写入，就相当于对 descr 的（只读）值的覆盖和重载。
+        //   此时，descr 的（只读）值就相当于一个默认值，而重载的数据会保存到实例（对象）自己的数据 dict 中。
         if (f != NULL && PyDescr_IsData(descr)) {
 
             res = f(descr, obj, (PyObject *)obj->ob_type);
@@ -1413,14 +1424,14 @@ _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
         }
     }
 
-    /// 从该对象的数据 dict 中获取 name 项
+    /// 从实例（对象）的数据 dict 中获取 name 项
 
-    // 如果参数中没有指定该对象的数据 dict
-    // + 通过该对象的 GetDictPtr 接口来自动获取数据 dict
+    // 如果参数中没有指定该实例（对象）的数据 dict
+    // + 通过该实例（对象）的 GetDictPtr 接口来自动获取其数据 dict
     if (dict == NULL) {
 
         /* Inline _PyObject_GetDictPtr */
-        // 如果该对象存在数据 dict
+        // 如果该实例（对象）存在数据 dict
         dictoffset = tp->tp_dictoffset;
         if (dictoffset != 0) {
 
@@ -1438,12 +1449,12 @@ _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
                 assert(dictoffset % SIZEOF_VOID_P == 0);
             }
 
-            // 获取该对象的数据 dict
+            // 获取该实例（对象）的数据 dict
             dictptr = (PyObject **) ((char *)obj + dictoffset);
             dict = *dictptr;
         }
     }
-    // 如果该对象存在数据 dict
+    // 如果该实例（对象）存在数据 dict
     if (dict != NULL) {
         Py_INCREF(dict);
 
@@ -1458,13 +1469,16 @@ _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
         Py_DECREF(dict);
     }
 
-    // 如果存在类/类型定义的 name 项，由类/类型定义的 name 项来处理
+    // 如果 {数据类型（对象）的 name 定义项} 是个只读的 descriptor（对象）
+    // + 此时说明在实例（对象）自己的数据 dict 中，并没有对 name 项进行重载覆盖
     if (f != NULL) {
         res = f(descr, obj, (PyObject *)Py_TYPE(obj));
         Py_DECREF(descr);
         goto done;
     }
 
+    // 如果数据类型（对象）的 name 项不是 descriptor 对象
+    // + 此时该 name 项被视为是数据类型（对象）的 {静态成员}
     if (descr != NULL) {
         res = descr;
         /* descr was already increfed above */
