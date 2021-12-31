@@ -165,9 +165,10 @@ wrapperdescr_get(PyWrapperDescrObject *descr, PyObject *obj, PyObject *type)
 {
     PyObject *res;
 
+    // 如果验证参数失败，直接返回
     if (descr_check((PyDescrObject *)descr, obj, &res))
         return res;
-        
+
     return PyWrapper_New((PyObject *)descr, obj);
 }
 
@@ -283,6 +284,7 @@ wrapperdescr_call(PyWrapperDescrObject *descr, PyObject *args, PyObject *kwds)
     PyObject *self, *func, *result;
 
     /* Make sure that the first argument is acceptable as 'self' */
+    // 
     assert(PyTuple_Check(args));
     argc = PyTuple_GET_SIZE(args);
     if (argc < 1) {
@@ -309,12 +311,15 @@ wrapperdescr_call(PyWrapperDescrObject *descr, PyObject *args, PyObject *kwds)
     func = PyWrapper_New((PyObject *)descr, self);
     if (func == NULL)
         return NULL;
+
     args = PyTuple_GetSlice(args, 1, argc);
     if (args == NULL) {
         Py_DECREF(func);
         return NULL;
     }
+
     result = PyEval_CallObjectWithKeywords(func, args, kwds);
+
     Py_DECREF(args);
     Py_DECREF(func);
     return result;
@@ -543,6 +548,7 @@ PyTypeObject PyGetSetDescr_Type = {
     (descrsetfunc)getset_set,                   /* tp_descr_set */
 };
 
+// 数据类型（对象）slot 接口的 wrapper
 PyTypeObject PyWrapperDescr_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     "wrapper_descriptor",
@@ -649,13 +655,16 @@ PyDescr_NewGetSet(PyTypeObject *type, PyGetSetDef *getset)
     return (PyObject *)descr;
 }
 
+// 为数据类型（对象）`type` 的 slot 定义项创建一个 wrapper
+// + 该 wrapper 会作为数据类型（对象）`type` 的一个操作符。
+//   也就是将 c 功能接口，封装成为 Python 语言可访问操作项
 PyObject *
 PyDescr_NewWrapper(PyTypeObject *type, struct wrapperbase *base, void *wrapped/* callback_data */)
 {
     PyWrapperDescrObject *descr;
 
     // 创建一个数据类型（对象）`PyWrapperDescr_Type` 的实例（对象）
-    // + 并对 type 和 base->name 进行 wrapper
+    // + 并对 `type` 和 `base->name` 进行 wrapper
     descr = (PyWrapperDescrObject *)descr_new(&PyWrapperDescr_Type,
                                              type, base->name);
     if (descr != NULL) {
@@ -907,7 +916,7 @@ PyDictProxy_New(PyObject *dict)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// 内置数据类型 `wrapper` 的定义
+// 私有数据类型 `wrappertype` 的定义
 ///////////////////////////////////////////////////////////////////////////////
 
 /* --- Wrapper object for "slot" methods --- */
@@ -1019,12 +1028,14 @@ wrapper_call(wrapperobject *wp, PyObject *args, PyObject *kwds)
     // 获取被 wrapper 的实际目标对象
     PyObject *self = wp->self;
 
+    // 如果需要支持 kwds 参数
     if (wp->descr->d_base->flags & PyWrapperFlag_KEYWORDS) {
 
         wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
-        return (*wk)(self, args, wp->descr->d_wrapped, kwds);
+        return (*wk)(self, args, wp->descr->d_wrapped/* callback_data */, kwds);
     }
 
+    //（如果不支持 kwds 参数） kwds 参数不为空，报错
     if (kwds != NULL && (!PyDict_Check(kwds) || PyDict_Size(kwds) != 0)) {
         PyErr_Format(PyExc_TypeError,
                      "wrapper %s doesn't take keyword arguments",
@@ -1084,7 +1095,9 @@ static PyTypeObject wrappertype = {
 
 PyObject *
 PyWrapper_New(PyObject *d, PyObject *self)
-{
+{   // @ wrapperdescr_call
+    // @ wrapperdescr_get
+
     wrapperobject *wp;
     PyWrapperDescrObject *descr;
 
