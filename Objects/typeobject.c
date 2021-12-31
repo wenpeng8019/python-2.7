@@ -3697,7 +3697,7 @@ PyTypeObject PyBaseObject_Type = {
     0,                                          /* tp_as_sequence */
     0,                                          /* tp_as_mapping */
     (hashfunc)_Py_HashPointer,                  /* tp_hash */
-    0,                                          /* tp_call */
+    0,                                          /* tp_call          【不能自调用】*/
     object_str,                                 /* tp_str */
     PyObject_GenericGetAttr,                    /* tp_getattro */
     PyObject_GenericSetAttr,                    /* tp_setattro */
@@ -6070,6 +6070,8 @@ typedef struct wrapperbase slotdef;
            "x." NAME "(y) <==> " DOC)
 
 // 系统原生数据类型的 {默认 builtin 处理接口定义描述表}
+// + 这里定义的 slotdefs 的数据结构是一个数组
+//   而每一项的数据结构类型 slotdef 则是通过 typedef 对 struct wrapperbase 的重命名
 static slotdef slotdefs[] = {
     SQSLOT("__len__", sq_length, slot_sq_length, wrap_lenfunc,
            "x.__len__() <==> len(x)"),
@@ -6646,21 +6648,23 @@ add_operators(PyTypeObject *type)
     // 确保 {默认 builtin 处理接口定义描述表} 初始化完成
     init_slotdefs();
 
-    // 遍历默认 builtin 处理接口表
+    // 遍历 {默认 builtin 处理接口定义描述表}
     for (p = slotdefs; p->name; p++) {
         if (p->wrapper == NULL)
             continue;
 
-        // 获取该处理接口项，所属的抽象类型结构的入口地址
+        // 获取该 {处理接口项} 所属的 {抽象类型结构} 的入口地址
         ptr = slotptr(type, p->offset);
         if (!ptr || !*ptr)
             continue;
 
+        // 获取该数据类型（对象）的
         if (PyDict_GetItem(dict, p->name_strobj))
             continue;
 
         // 将处理接口添加到类型（对象）的数据 dict 中
         if (*ptr == PyObject_HashNotImplemented) {
+
             /* Classes may prevent the inheritance of the tp_hash
                slot by storing PyObject_HashNotImplemented in it. Make it
                visible as a None value for the __hash__ attribute. */
@@ -6668,6 +6672,8 @@ add_operators(PyTypeObject *type)
                 return -1;
         }
         else {
+
+            // （基于 slotdef 项）创建一个 PyWrapperDescrObject 对象
             descr = PyDescr_NewWrapper(type, p, *ptr);
             if (descr == NULL)
                 return -1;

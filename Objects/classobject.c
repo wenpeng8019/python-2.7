@@ -546,7 +546,7 @@ PyClass_IsSubclass(PyObject *klass, PyObject *base)
 
 /* Instance objects */
 
-// 创建一个类实例对象
+// 新建一个 class 类的实例（对象）
 PyObject *
 PyInstance_NewRaw(PyObject *klass, PyObject *dict)
 {   // @ extern
@@ -664,6 +664,10 @@ Create an instance without calling its __init__() method.\n\
 The class must be a classic class.\n\
 If present, dict must be a dictionary or None.");
 
+// 新建一个 class 类（对象）的实例（对象）
+// + 关于参数
+//   - `type`
+//     + 数据类型(对象) `instance` 或其派生类型
 static PyObject *
 instance_new(PyTypeObject* type, PyObject* args, PyObject *kw)
 {   // @ PyInstance_Type.tp_new
@@ -671,10 +675,15 @@ instance_new(PyTypeObject* type, PyObject* args, PyObject *kw)
     PyObject *klass;
     PyObject *dict = Py_None;
 
+    // 解析参数：
+    // - PyClass_Type 用于指定 klass 的数据类型（即 `class` 类型）
+    // - klass 为 class 类（对象），它是数据类型 `class` 的一个实例（对象）
+    // - 要新建的 class 类（对象）的实例（对象）的数据 dict
     if (!PyArg_ParseTuple(args, "O!|O:instance",
                           &PyClass_Type, &klass, &dict))
         return NULL;
 
+    // 验证并处理 dict 参数
     if (dict == Py_None)
         dict = NULL;
     else if (!PyDict_Check(dict)) {
@@ -940,32 +949,46 @@ instance_setattr(PyInstanceObject *inst, PyObject *name, PyObject *v)
     return 0;
 }
 
+// class 类实例（对象）的默认 repr 输出
 static PyObject *
 instance_repr(PyInstanceObject *inst)
 {
     PyObject *func;
     PyObject *res;
-    static PyObject *reprstr;
 
+    // 初始化构造静态常量字符串 "__repr__"
+    static PyObject *reprstr;
     if (reprstr == NULL) {
         reprstr = PyString_InternFromString("__repr__");
         if (reprstr == NULL)
             return NULL;
     }
+
+    // class 类实例（对象）的 "__repr__" 属性
     func = instance_getattr(inst, reprstr);
+
+    // 获取默认 repr 处理
     if (func == NULL) {
+
         PyObject *classname, *mod;
         char *cname;
         if (!PyErr_ExceptionMatches(PyExc_AttributeError))
             return NULL;
+
         PyErr_Clear();
+
+        // 获取 class 类实例（对象）对应的 class 类（对象）的命名
         classname = inst->in_class->cl_name;
+
+        // 获取 class 类（对象）所属的 module
         mod = PyDict_GetItemString(inst->in_class->cl_dict,
                                    "__module__");
+
         if (classname != NULL && PyString_Check(classname))
             cname = PyString_AsString(classname);
         else
             cname = "?";
+
         if (mod == NULL || !PyString_Check(mod))
             return PyString_FromFormat("<?.%s instance at %p>",
                                        cname, inst);
@@ -974,8 +997,10 @@ instance_repr(PyInstanceObject *inst)
                                        PyString_AsString(mod),
                                        cname, inst);
     }
+
     res = PyEval_CallObject(func, (PyObject *)NULL);
     Py_DECREF(func);
+
     return res;
 }
 
