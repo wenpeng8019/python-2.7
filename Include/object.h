@@ -323,10 +323,22 @@ typedef PyObject *(*allocfunc)(struct _typeobject *, Py_ssize_t);
 
 typedef struct _typeobject {
     PyObject_VAR_HEAD
-    const char *tp_name; /* For printing, in format "<module>.<name>" */
-    Py_ssize_t tp_basicsize, tp_itemsize; /* For allocation */
 
-    /* Methods to implement standard operations */
+    const char *tp_name; /* For printing, in format "<module>.<name>"（该数据类型的命名） */
+
+    Py_ssize_t tp_basicsize, tp_itemsize; /* For allocation
+                                           * - tp_basicsize
+                                           *   该数据类型（对象）的实例（对象）的结构体定义的结构大小
+                                           *   也就是由结构体直接定义的，实例（对象）的静态数据大小
+                                           *   对应的，我们可以在创建该实例（对象）时，在静态数据大小的基础上，动态增加一个动态数据部分。
+                                           *   而这个静态数据的大小，就是动态数据部分的地址偏移量
+                                           * - tp_itemsize
+                                           *   对于 PyVarObject 类型对象，它的内存占用，包括静态定义的结构体大小，和动态分配时指定的大小两个部分
+                                           *   动态指定的大小为 PyVarObject.ob_size * PyTypeObject.tp_itemsize
+                                           *   这里的 tp_itemsize 就是用来定义每个 item 的字节大小。
+                                           */
+
+    /* Methods to implement standard operations（数据类型的标准操作接口） */
 
     destructor          tp_dealloc;
     printfunc           tp_print;
@@ -335,7 +347,7 @@ typedef struct _typeobject {
     cmpfunc             tp_compare;
     reprfunc            tp_repr;
 
-    /* Method suites for standard classes */
+    /* Method suites for standard classes（标准类的抽象数据类型接口） */
 
     PyNumberMethods     *tp_as_number;
     PySequenceMethods   *tp_as_sequence;
@@ -379,7 +391,7 @@ typedef struct _typeobject {
     /* Flags to define presence of optional/expanded features */
     long                tp_flags;
 
-    const char          *tp_doc; /* Documentation string */
+    const char          *tp_doc; /* Documentation string（该数据类型的文档说明） */
 
     /* Assigned meaning in release 2.0 */
     /* call function for all accessible objects */
@@ -412,7 +424,7 @@ typedef struct _typeobject {
                                                      *   所有它根本就没有 tp_base 成员的概念
                                                      */
     PyObject        *tp_dict;                       /* 该类型（对象）的数据 dict 对象 */
-    
+
     descrgetfunc    tp_descr_get;                   /* 访问该数据类型（对象）的实例（对象）的值
                                                      * 此时，该实例（对象）往往就代表一个值。例如：一个数值型实例（对象）
                                                      * 而这里在访问这个实例（对象）时，往往就是访问这个值。

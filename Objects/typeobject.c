@@ -776,6 +776,7 @@ PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)
     if (type->tp_flags & Py_TPFLAGS_HEAPTYPE)
         Py_INCREF(type);
 
+    // 如果该数据类型（对象）`type` 没有设置动态 item 部分
     if (type->tp_itemsize == 0)
         PyObject_INIT(obj, type);
     else
@@ -783,6 +784,7 @@ PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)
 
     if (PyType_IS_GC(type))
         _PyObject_GC_TRACK(obj);
+        
     return obj;
 }
 
@@ -1729,11 +1731,12 @@ best_base(PyObject *bases)
     for (i = 0; i < n; i++) {
         base_proto = PyTuple_GET_ITEM(bases, i);
 
-        // 如果 base 的 type 类型为 class
+        // 如果 base 的数据类型（对象）为 `class`
         if (PyClass_Check(base_proto))
             continue;
 
-        // 验证 base 的 type 类型要么是 class，要么必须是 type
+        // 验证 base 的数据类型（对象）要么是(前面跳过的) `class`，要么必须是 `type`
+        // + 也就是 base 自身也是一个数据类型（对象）
         if (!PyType_Check(base_proto)) {
             PyErr_SetString(
                 PyExc_TypeError,
@@ -1741,16 +1744,19 @@ best_base(PyObject *bases)
             return NULL;
         }
 
-        // 确保完成 ready 处理
+        // 确保 base 完成 ready 处理
         base_i = (PyTypeObject *)base_proto;
         if (base_i->tp_dict == NULL) {
             if (PyType_Ready(base_i) < 0)
                 return NULL;
         }
 
+        // 获取 base-item 的基
+        // + 如果 base-item 对它的直接 base 进行了重载，那么用该 base-item 就作为基
+        //   否则，使用 base-item 的直接 base 作为基
         candidate = solid_base(base_i);
 
-        // 对于第一个 type 类型（对象）
+        // 对于首次出现的有效的 base
         if (winner == NULL) {
             winner = candidate;
             base = base_i;
@@ -2144,20 +2150,23 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
        and check for metatype conflicts while we're at it.
        Note that if some other metatype wins to contract,
        it's possible that its instances are not types. */
-    // 获取 bases 基类中的最大派生类型
-    nbases = PyTuple_GET_SIZE(bases);
-    // 默认以 type 类型（对象）作为 metaclass
-    winner = metatype;
+    // 检测用于创建新数据类型（对象）的 metatype
+    winner = metatype;                      // 默认以入参 `metatype`，也就是数据类型（对象）`type`，作为 metaclass
+
+    // 遍历新建数据类型（对象）的基类
+    nbases = PyTuple_GET_SIZE(bases);    
     for (i = 0; i < nbases; i++) {
         tmp = PyTuple_GET_ITEM(bases, i);
         tmptype = tmp->ob_type;
 
-        // base 的 type 类型为 class
-        // + 此时 base 为基类，不是 metaclass
+        // 基类（base）的数据类型（对象）为 `class`
+        // + 也就是该基类（base）是自定义类（对象），它是数据类型（对象）`class` 的实例（对象）
         if (tmptype == &PyClass_Type)
             continue; /* Special case classic classes */
 
-        /// 此时的 base 都是 type 类型（对象）的派生类型，即作为 metaclass
+        /// 基类（base）的数据类型（对象）为 `type`，即 metatype
+        /// + 此时基类（base）自身就是一个数据类型（对象），更准确说自身也是一个 metatype，
+        //    也就是数据类型（对象）`type` 的派生类型
 
         // base 是基类
         if (PyType_IsSubtype(winner, tmptype))
@@ -2187,6 +2196,8 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
 
         metatype = winner;
     }
+
+    /// 执行默认的 metatype 构建处理
 
     /* Adjust for empty tuple bases */
     // 如果 bases 为空，默认使用 `object` 类型作为基类
@@ -2225,6 +2236,9 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
     add_weak = 0;
     may_add_dict = base->tp_dictoffset == 0;
     may_add_weak = base->tp_weaklistoffset == 0 && base->tp_itemsize == 0;
+
+    // 如果没有指定自定义的 __slots__
+    // + 使用默认 slots
     if (slots == NULL) {
         if (may_add_dict) {
             add_dict++;
@@ -2367,7 +2381,8 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
                 break;
             }
         }
-    }
+
+    } // ! if (slots == NULL)
 
     /* XXX From here until type is safely allocated,
        "return NULL" may leak slots! */
@@ -2375,7 +2390,7 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
     /// 动态创建一个 type 类型（对象）
 
     /* Allocate the type object */
-    // 创建一个原生数据类型对象 PyTypeObject，且它（自身）的原生数据类型为 metatype
+    // 创建一个新的数据类型（对象）PyTypeObject
     // ! 这里可能会有一个小“困惑”
     //   + 这里的 metatype 很可能就是 type 对象，而初始定义时，PyType_Type 的 tp_alloc 属性为 null，那么这里是如何调用的
     //     事实上，所有原生数据类型对象，即 PyTypeObject，其在执行初始化 ready 处理后，
@@ -2441,7 +2456,7 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
     /// 初始化该类型（对象）的默认属性程序
 
     /* Set __module__ in the dict */
-    // 初始化设置该类型（对象）所属的 module
+    // 初始化设置该数据类型（对象）所属的 module
     if (PyDict_GetItemString(dict, "__module__") == NULL) {
         tmp = PyEval_GetGlobals();
         if (tmp != NULL) {
@@ -2458,7 +2473,7 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
        and is a string.  The __doc__ accessor will first look for tp_doc;
        if that fails, it will still look into __dict__.
     */
-    // 初始化设置该类型（对象）的 doc 信息
+    // 初始化设置该数据类型（对象）的 doc 信息
     {
         PyObject *doc = PyDict_GetItemString(dict, "__doc__");
         if (doc != NULL && PyString_Check(doc)) {
@@ -2494,7 +2509,10 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
     /* Add descriptors for custom slots from __slots__, or for __dict__ */
     mp = PyHeapType_GET_MEMBERS(et);
     slotoffset = base->tp_basicsize;
+
+    // 如果指定了自定义的 __slots__
     if (slots != NULL) {
+
         for (i = 0; i < nslots; i++, mp++) {
             mp->name = PyString_AS_STRING(
                 PyTuple_GET_ITEM(slots, i));
@@ -2508,6 +2526,7 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
             slotoffset += sizeof(PyObject *);
         }
     }
+
     if (add_dict) {
         if (base->tp_itemsize)
             type->tp_dictoffset = -(long)sizeof(PyObject *);
