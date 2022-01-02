@@ -6275,7 +6275,7 @@ static slotdef slotdefs[] = {
    the offset to the type pointer, since it takes care to indirect through the
    proper indirection pointer (as_buffer, etc.); it returns NULL if the
    indirection pointer is NULL. */
-// 通过接口的索引编号，获取接口函数的实际入口地址
+// 通过 slot 接口的索引编号，获取 slot 接口函数的实际入口地址
 static void **
 slotptr(PyTypeObject *type, int ioffset)
 {
@@ -6637,7 +6637,7 @@ recurse_down_subclasses(PyTypeObject *type, PyObject *name,
    slot that calls the method from the dictionary, and we want to avoid
    infinite recursion here.) */
 
-// 给系统原生数据类型（对象），添加默认 builtin 处理接口
+// 给数据类型（对象），添加默认 builtin 处理接口
 static int
 add_operators(PyTypeObject *type)
 {   // @ PyType_Ready
@@ -6657,6 +6657,7 @@ add_operators(PyTypeObject *type)
 
         // 获取该 {处理接口项} 所属的 {抽象类型结构} 的入口地址
         ptr = slotptr(type, p->offset);
+        // 跳过没有实现的处理接口
         if (!ptr || !*ptr)
             continue;
 
@@ -6675,11 +6676,12 @@ add_operators(PyTypeObject *type)
         }
         else {
 
-            // （基于 slotdef 项）创建一个 PyWrapperDescrObject 对象
-            descr = PyDescr_NewWrapper(type/*  */, p, *ptr/* callback_data */);
+            // 给数据类型（对象）`type`, 创建一个（基于 slotdef 项）slot wrapper 对象
+            descr = PyDescr_NewWrapper(type, p/* 项）slotdef */, *ptr/* callback_data */);
             if (descr == NULL)
                 return -1;
 
+            // 将 slot wrapper 对象，添加到数据类型（对象）`type` 到数据 dict 中
             if (PyDict_SetItem(dict, p->name_strobj, descr) < 0)
                 return -1;
 

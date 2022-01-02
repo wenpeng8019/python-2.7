@@ -1268,17 +1268,24 @@ PyObject_SetAttr(PyObject *v, PyObject *name, PyObject *value)
 
 /* Helper to get a pointer to an object's __dict__ slot, if any */
 
+// 获取对象的 "__dict__" 内置成员
 PyObject **
 _PyObject_GetDictPtr(PyObject *obj)
 {
     Py_ssize_t dictoffset;
+
+    // 获取对象的数据类型（对象）
     PyTypeObject *tp = Py_TYPE(obj);
 
+    // 如果该数据类型（对象）不支持类机制
+    // + 此时，不支持 __dict__ 特性
     if (!(tp->tp_flags & Py_TPFLAGS_HAVE_CLASS))
         return NULL;
+
     dictoffset = tp->tp_dictoffset;
     if (dictoffset == 0)
         return NULL;
+
     if (dictoffset < 0) {
         Py_ssize_t tsize;
         size_t size;
@@ -1292,6 +1299,7 @@ _PyObject_GetDictPtr(PyObject *obj)
         assert(dictoffset > 0);
         assert(dictoffset % SIZEOF_VOID_P == 0);
     }
+    
     return (PyObject **) ((char *)obj + dictoffset);
 }
 

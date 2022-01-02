@@ -412,6 +412,7 @@ typedef struct _typeobject {
                                                      *   所有它根本就没有 tp_base 成员的概念
                                                      */
     PyObject        *tp_dict;                       /* 该类型（对象）的数据 dict 对象 */
+    
     descrgetfunc    tp_descr_get;                   /* 访问该数据类型（对象）的实例（对象）的值
                                                      * 此时，该实例（对象）往往就代表一个值。例如：一个数值型实例（对象）
                                                      * 而这里在访问这个实例（对象）时，往往就是访问这个值。

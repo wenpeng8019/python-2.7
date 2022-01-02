@@ -24,7 +24,7 @@ static PyObject *instance_getattr2(PyInstanceObject *, PyObject *);
 
 static PyObject *getattrstr, *setattrstr, *delattrstr;
 
-// 定义（创建）一个（原生数据类型为 class 类型的）自定义类（对象），即 class 对象
+// 定义（创建）一个（数据类型为 `class` 类型的）自定义类（对象），即 class 对象
 PyObject *
 PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
      /* bases is NULL or tuple of classobjects! */
