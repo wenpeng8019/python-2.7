@@ -1127,10 +1127,12 @@ PyObject_GetAttrString(PyObject *v, const char *name)
 
     if (Py_TYPE(v)->tp_getattr != NULL)
         return (*Py_TYPE(v)->tp_getattr)(v, (char*)name);
+
     w = PyString_InternFromString(name);
     if (w == NULL)
         return NULL;
     res = PyObject_GetAttr(v, w);
+
     Py_XDECREF(w);
     return res;
 }
@@ -1189,8 +1191,10 @@ PyObject_GetAttr(PyObject *v, PyObject *name)
     }
     if (tp->tp_getattro != NULL)
         return (*tp->tp_getattro)(v, name);
+        
     if (tp->tp_getattr != NULL)
         return (*tp->tp_getattr)(v, PyString_AS_STRING(name));
+
     PyErr_Format(PyExc_AttributeError,
                  "'%.50s' object has no attribute '%.400s'",
                  tp->tp_name, PyString_AS_STRING(name));
@@ -1282,14 +1286,18 @@ _PyObject_GetDictPtr(PyObject *obj)
     if (!(tp->tp_flags & Py_TPFLAGS_HAVE_CLASS))
         return NULL;
 
+    // 获取该数据类型（对象）的实例（对象）的 dict 地址偏移量
+    // 如果该数据类型（对象）没有定义 dict 项，则直接返回
     dictoffset = tp->tp_dictoffset;
     if (dictoffset == 0)
         return NULL;
 
+    // 如果该数据类型（对象）的实例（对象），是个动态可变对象
     if (dictoffset < 0) {
         Py_ssize_t tsize;
         size_t size;
 
+        // 计算动态可变部分长度
         tsize = ((PyVarObject *)obj)->ob_size;
         if (tsize < 0)
             tsize = -tsize;
@@ -1300,6 +1308,7 @@ _PyObject_GetDictPtr(PyObject *obj)
         assert(dictoffset % SIZEOF_VOID_P == 0);
     }
     
+    // (根据 dict 地址偏移量) 返回 dict 对象
     return (PyObject **) ((char *)obj + dictoffset);
 }
 

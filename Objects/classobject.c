@@ -210,6 +210,7 @@ PyDoc_STRVAR(class_doc,
 Create a class object.  The name must be a string; the second argument\n\
 a tuple of classes, and the third a dictionary.");
 
+// 创建一个自定义类（对象）
 static PyObject *
 class_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {   // @ PyClass_Type.tp_new

@@ -382,8 +382,13 @@ typedef struct _typeobject {
                                                          *   - @ PyObject_Call() $ [abstract.c]
                                                          */
     reprfunc            tp_str;
-    getattrofunc        tp_getattro;
-    setattrofunc        tp_setattro;
+    getattrofunc        tp_getattro;                    
+    setattrofunc        tp_setattro;                    /* tp_getattro/tp_setattro 应该和 tp_getattr/tp_setattr 功能等价
+                                                         * 区别在于参数 attr_name 的数据类型，
+                                                         * - tp_xxxattr 的数据类型为 const char*
+                                                         * - 而 tp_xxxattro 的数据类型为 PyObject
+                                                         * 这两个接口会自动转换 name 的数据类型，然后互相调用。
+                                                         */
 
     /* Functions to access object as input/output buffer */
     PyBufferProcs       *tp_as_buffer;
@@ -428,11 +433,22 @@ typedef struct _typeobject {
     descrgetfunc    tp_descr_get;                   /* 访问该数据类型（对象）的实例（对象）的值
                                                      * 此时，该实例（对象）往往就代表一个值。例如：一个数值型实例（对象）
                                                      * 而这里在访问这个实例（对象）时，往往就是访问这个值。
-                                                     * ! tp_getattr 接口的区分在于
+                                                     * ! 和 tp_getattr 接口的区分在于
                                                      *   tp_getattr 访问的是这个实例（对象）的某个属性，而非它的值
                                                      */
     descrsetfunc    tp_descr_set;
-    Py_ssize_t      tp_dictoffset;
+    Py_ssize_t      tp_dictoffset;                  /* 该数据类型（对象）的实例（对象）是否存在数据 dict（对象）
+                                                     * - 如果存在，则该属性的值表示的是，实例（对象）的数据 dict（对象）在实例（对象）的结构体定义中的偏移地址
+                                                     * - 如果该值为 0，则说明实例（对象）没有定义数据 dict（对象）
+                                                     * + 数据 dict（对象）的核心作用是给（实例）对象提供动态属性机制的，
+                                                     *   该数据 dict（对象）会被 tp_getattro/tp_setattro 接口的默认实现访问
+                                                     * + 事实上，大多数数据类型的实例（对象）都没有定义数据 dict（对象），例如：int、float、str、...
+                                                     *   而定义了数据 dict 的数据类型（对象）包括：
+                                                     *   PyTypeObject、PyModule_Type、PyFunction_Type
+                                                     *   PyBufferedXXX_Type、_PyExc_BaseException、PyIOBase_Type
+                                                     * + 此外，该属性的值，或者说 "实例（对象）存在数据 dict（对象）" 的特性，是具有继承性的
+                                                     *   也就是说，如果该数据类型（对象）的实例（对象）存在数据 dict（对象），那么它的派生类型（的实例）也具有数据 dict 特性
+                                                     */
     initproc        tp_init;                        // 该类型（对象）的构造函数
     allocfunc       tp_alloc;                       // 该类型（对象）的分配一个新的实例（对象）
     newfunc         tp_new;

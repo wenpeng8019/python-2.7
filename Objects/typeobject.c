@@ -709,13 +709,11 @@ type_repr(PyTypeObject *type)
     return rtn;
 }
 
-// 数据类型（对象）`type` 的自调用处理。例如：type()
-// + 该调用的处理存在两种情况
-//   - 只有一个参数 obj，此时返回该 obj 的 type 类型
-//   - 如果是三个参数，此时创建一个 type 类型为 type 的新的类型（对象）
+// 所有数据类型（对象）的自调用处理。例如：type()、int()、str()、...
 static PyObject *
 type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
-{
+{   // @ PyType_Type.tp_call 
+
     PyObject *obj;
 
     // 验证该 type 类型（对象）的 new 接口有效
@@ -755,10 +753,12 @@ type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
     return obj;
 }
 
-// 数据类型（对象）通用的动态分配实例（对象）的处理
+// 所有数据类型（对象）的 {动态分配一个实例（对象）} 的通用处理
 PyObject *
 PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)
-{
+{   // @ PyBaseObject_Type.tp_alloc
+    // @ type_new
+
     PyObject *obj;
     const size_t size = _PyObject_VAR_SIZE(type, nitems+1);
     /* note that we need to add one, for the sentinel */
@@ -784,11 +784,11 @@ PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)
 
     if (PyType_IS_GC(type))
         _PyObject_GC_TRACK(obj);
-        
+
     return obj;
 }
 
-// 数据类型（对象）通用的新建一个实例（对象）的处理
+// 数据类型（对象）通用的 {新建一个实例（对象）} 的处理
 PyObject *
 PyType_GenericNew(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
@@ -1790,16 +1790,22 @@ extra_ivars(PyTypeObject *type, PyTypeObject *base)
     size_t t_size = type->tp_basicsize;
     size_t b_size = base->tp_basicsize;
 
+    // 验证派生类型 `type` 的实例（对象）的结构定义大小，肯定不小于基类类型 `base` 的实例（对象）的结构定义大小
     assert(t_size >= b_size); /* Else type smaller than base! */
+
+    // 如果（派生、基类类型的）实例对象存在动态结构定义大小
     if (type->tp_itemsize || base->tp_itemsize) {
+
         /* If itemsize is involved, stricter rules */
         return t_size != b_size ||
             type->tp_itemsize != base->tp_itemsize;
     }
+
     if (type->tp_weaklistoffset && base->tp_weaklistoffset == 0 &&
         type->tp_weaklistoffset + sizeof(PyObject *) == t_size &&
         type->tp_flags & Py_TPFLAGS_HEAPTYPE)
         t_size -= sizeof(PyObject *);
+
     if (type->tp_dictoffset && base->tp_dictoffset == 0 &&
         type->tp_dictoffset + sizeof(PyObject *) == t_size &&
         type->tp_flags & Py_TPFLAGS_HEAPTYPE)
@@ -1835,11 +1841,17 @@ static void fixup_slot_dispatchers(PyTypeObject *);
  */
 static PyTypeObject *
 get_builtin_base_with_dict(PyTypeObject *type)
-{
+{   // @ subtype_dict
+    // @ subtype_setdict
+
     while (type->tp_base != NULL) {
+
+        // 如果不是动态创建的数据类型（对象），且存在数据 dict 定义
+        // + 即满足目标，直接返回
         if (type->tp_dictoffset != 0 &&
             !(type->tp_flags & Py_TPFLAGS_HEAPTYPE))
             return type;
+
         type = type->tp_base;
     }
     return NULL;
@@ -2092,12 +2104,13 @@ type_init(PyObject *cls, PyObject *args, PyObject *kwds)
     return res;
 }
 
-// type 类型（对象）（在自调用时）创建自己的（类型实例）对象
-// + type 类型（对象）是个特殊的类型，它在逻辑上相当于一个类厂对象
-//   即它创建的（类型实例）对象应该是一个类型（对象），即它的 type 类型为 type 类型（对象）
+// {数据类型（对象）type} 的 tp_new 接口的实现
+// + {数据类型（对象）type} 是个特殊的数据类型（对象），它在逻辑上相当于一个类厂对象
+//   即它创建的实例（对象）仍然是一个数据类型（对象）
 static PyObject *
 type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
-{
+{   // @ PyType_Type.tp_new
+
     PyObject *name, *bases, *dict;
     static char *kwlist[] = {"name", "bases", "dict", 0};
     PyObject *slots, *tmp, *newslots;
@@ -2651,7 +2664,8 @@ _PyType_Lookup(PyTypeObject *type, PyObject *name)
    but uses _PyType_Lookup() instead of just looking in type->tp_dict. */
 static PyObject *
 type_getattro(PyTypeObject *type, PyObject *name)
-{
+{   // @ PyType_Type.tp_getattro
+
     PyTypeObject *metatype = Py_TYPE(type);
     PyObject *meta_attribute, *attribute;
     descrgetfunc meta_get;
@@ -2876,48 +2890,81 @@ type_is_gc(PyTypeObject *type)
     return type->tp_flags & Py_TPFLAGS_HEAPTYPE;
 }
 
+/******************************************************************************
+ * {数据类型（对象）type} 的结构体定义
+ * {数据类型（对象）type} 是个特殊的数据类型（对象）
+ * - 首先，它是个数据类型（对象），这和普通的 bool、int、float、str、... 数据类型（对象）一样。
+ * - 此外，{数据类型（对象）type} 是数据类型（对象）的数据类型。
+ *   也就是说，{数据类型（对象）type} 的实例（对象），依然是一个数据类型（对象）
+ *   且该数据类型（实例对象）的 {数据类型字段} 会指向 {数据类型（对象）type}
+ * - {数据类型（对象）type} 的 {数据类型字段} 会指向自身，即自循环。
+ * - 逻辑上看，{数据类型（对象）type} 相当于一个类厂。Python 称之为 metatype。
+ * 关于 {数据类型（对象）type} 的接口实现
+ * - 数据类型（对象）的接口实现，承担的是类的功能，也就是对其实例（对象）的调用，最终都是由类定义的方法统一实现
+ *   而 {数据类型（对象）type} 是数据类型（对象）的数据类型，因此，它的接口实现，实现的就是所有数据类型（对象）所具有功能，大体包括
+ *   - 数据类型（对象）都可自调用。用以创建一个（由自身数据类型所表达的）实例（对象），该实例（对象）的 {数据类型字段} 会指向自身
+ *     这是通过实现 tp_call 接口来完成的
+ * - 作为类定义，其接口的第一个参数，一般都是被调用的实例（对象）的指针，也就是类函数中的 this 指针。
+ *   而对于 {数据类型（对象）type} 来说，这个 this 指针，依然是一个数据类型（对象）
+ * 关于 {数据类型（对象）type} 的 tp_new 接口实现
+ * + 这是一个特殊的接口，它不具有上面说的类函数特性。
+ *  因为不同的数据类型（对象）的实例（对象）的结构体定义可能不同，这就意味着，每个数据类型（对象）的 tp_new 实现都不同
+ *  因此，它们的数据类型 {数据类型（对象）type} 的 tp_new 接口实现，就不再是它的实例（对象）的统一实现。
+ *  - 对于 {数据类型（对象）type} 的 tp_new 接口实现，完成的是 {type} 自身的业务需求
+ *  - 对于 {数据类型（对象）type} 的实例（对象），会重载该接口实现，实现自己独立的业务需求，即创建特定类型的实例（对象）
+ * 关于和 PyBaseObject_Type，即所有数据类型（对象）的基类，的区别
+ * - PyType_Type 承载的是所有数据类型（对象）自身的共同特性
+ * - PyBaseObject_Type 承载的则是所有数据类型（对象）的实例（对象）的共同特性
+ * - 此外，PyBaseObject_Type 也承担了所有数据类型（对象）的部分共同特性，因为 PyBaseObject_Type 同时也是 PyType_Type 的基类
+ *   不过，很多特性会被 PyType_Type 重载。
+ ******************************************************************************/
+
 PyTypeObject PyType_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     "type",                                     /* tp_name */
-    sizeof(PyHeapTypeObject),                   /* tp_basicsize */
-    sizeof(PyMemberDef),                        /* tp_itemsize */
-    (destructor)type_dealloc,                   /* tp_dealloc */
+    sizeof(PyHeapTypeObject),                   /* tp_basicsize         【重载了 PyBaseObject_Type 的默认实现】*/
+    sizeof(PyMemberDef),                        /* tp_itemsize          【PyBaseObject_Type 未实现过】 
+                                                 *                       tp_basicsize 和 tp_itemsize 只要用于创建动态数据类型（对象）
+                                                 *                       对于静态（内置）数据类型对象，不会用到这两个字段
+                                                 */
+    (destructor)type_dealloc,                   /* tp_dealloc           【重载了 PyBaseObject_Type 的默认实现】 */
     0,                                          /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
     0,                                          /* tp_compare */
-    (reprfunc)type_repr,                        /* tp_repr */
+    (reprfunc)type_repr,                        /* tp_repr              【重载了 PyBaseObject_Type 的默认实现】*/
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */
     0,                                          /* tp_as_mapping */
-    (hashfunc)_Py_HashPointer,                  /* tp_hash */
-    (ternaryfunc)type_call,                     /* tp_call */
-    0,                                          /* tp_str */
-    (getattrofunc)type_getattro,                /* tp_getattro */
-    (setattrofunc)type_setattro,                /* tp_setattro */
+    (hashfunc)_Py_HashPointer,                  /* tp_hash              【和 PyBaseObject_Type 一样（似乎没必要）】*/
+    (ternaryfunc)type_call,                     /* tp_call              【PyBaseObject_Type 未实现过】*/
+    0,                                          /* tp_str               【从 PyBaseObject_Type 继承】*/
+    (getattrofunc)type_getattro,                /* tp_getattro          【重载了 PyBaseObject_Type 的默认实现】*/
+    (setattrofunc)type_setattro,                /* tp_setattro          【重载了 PyBaseObject_Type 的默认实现】*/
     0,                                          /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC |
-        Py_TPFLAGS_BASETYPE | Py_TPFLAGS_TYPE_SUBCLASS,         /* tp_flags */
-    type_doc,                                   /* tp_doc */
-    (traverseproc)type_traverse,                /* tp_traverse */
-    (inquiry)type_clear,                        /* tp_clear */
-    type_richcompare,                                           /* tp_richcompare */
-    offsetof(PyTypeObject, tp_weaklist),        /* tp_weaklistoffset */
+        Py_TPFLAGS_BASETYPE | 
+        Py_TPFLAGS_TYPE_SUBCLASS,               /* tp_flags             【比 PyBaseObject_Type 多了 Py_TPFLAGS_HAVE_GC ｜ Py_TPFLAGS_TYPE_SUBCLASS】*/
+    type_doc,                                   /* tp_doc               【重载了 PyBaseObject_Type 的默认实现】*/
+    (traverseproc)type_traverse,                /* tp_traverse          【PyBaseObject_Type 未实现过】*/
+    (inquiry)type_clear,                        /* tp_clear             【PyBaseObject_Type 未实现过】*/
+    type_richcompare,                           /* tp_richcompare       【PyBaseObject_Type 未实现过】*/
+    offsetof(PyTypeObject, tp_weaklist),        /* tp_weaklistoffset    【PyBaseObject_Type 未实现过】*/
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
-    type_methods,                               /* tp_methods */
-    type_members,                               /* tp_members */
-    type_getsets,                               /* tp_getset */
+    type_methods,                               /* tp_methods           【重载了 PyBaseObject_Type 的默认实现】*/
+    type_members,                               /* tp_members           【PyBaseObject_Type 未实现过】*/
+    type_getsets,                               /* tp_getset            【重载了 PyBaseObject_Type 的默认实现】*/
     0,                                          /* tp_base */
     0,                                          /* tp_dict */
     0,                                          /* tp_descr_get */
     0,                                          /* tp_descr_set */
-    offsetof(PyTypeObject, tp_dict),            /* tp_dictoffset */
-    type_init,                                  /* tp_init */
-    0,                                          /* tp_alloc */
-    type_new,                                   /* tp_new */
-    PyObject_GC_Del,                            /* tp_free */
-    (inquiry)type_is_gc,                        /* tp_is_gc */
+    offsetof(PyTypeObject, tp_dict),            /* tp_dictoffset        【PyBaseObject_Type 未实现过】*/
+    type_init,                                  /* tp_init              【重载了 PyBaseObject_Type 的默认实现】*/
+    0,                                          /* tp_alloc             【从 PyBaseObject_Type 继承】 */
+    type_new,                                   /* tp_new               【重载了 PyBaseObject_Type 的默认实现】*/
+    PyObject_GC_Del,                            /* tp_free              【重载了 PyBaseObject_Type 的默认实现】*/
+    (inquiry)type_is_gc,                        /* tp_is_gc             【PyBaseObject_Type 未实现过】*/
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -3718,12 +3765,12 @@ PyTypeObject PyBaseObject_Type = {
     0,                                          /* tp_as_sequence */
     0,                                          /* tp_as_mapping */
     (hashfunc)_Py_HashPointer,                  /* tp_hash */
-    0,                                          /* tp_call          【不能自调用】*/
+    0,                                          /* tp_call          【默认不能自调用】*/
     object_str,                                 /* tp_str */
     PyObject_GenericGetAttr,                    /* tp_getattro */
     PyObject_GenericSetAttr,                    /* tp_setattro */
     0,                                          /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /* tp_flags */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,   /* tp_flags */
     PyDoc_STR("The most base type"),            /* tp_doc */
     0,                                          /* tp_traverse */
     0,                                          /* tp_clear */
