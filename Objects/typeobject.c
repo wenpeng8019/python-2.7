@@ -1603,11 +1603,16 @@ mro_implementation(PyTypeObject *type)
         PyObject *base = PyTuple_GET_ITEM(bases, i);
 
         PyObject *parentMRO;
+
+        // 如果 base 是 {数据类型（对象）type} 或其派生类型
+        // + 也就是 metatype 类厂
         if (PyType_Check(base))
-            parentMRO = PySequence_List(
-                ((PyTypeObject*)base)->tp_mro);
+            parentMRO = PySequence_List(((PyTypeObject*)base)->tp_mro);
+        // 如果 base 是 {数据类型（对象）class} 的实例（对象）
+        // + 也就是自定义类（对象）
         else
             parentMRO = classic_mro(base);
+            
         if (parentMRO == NULL) {
             Py_DECREF(to_merge);
             return NULL;
@@ -1663,19 +1668,23 @@ mro_internal(PyTypeObject *type)
     int checkit = 0;
 
     if (Py_TYPE(type) == &PyType_Type) {
+
         result = mro_implementation(type);
     }
     else {
         static PyObject *mro_str;
         checkit = 1;
+
         mro = lookup_method((PyObject *)type, "mro", &mro_str);
         if (mro == NULL)
             return -1;
+
         result = PyObject_CallObject(mro, NULL);
         Py_DECREF(mro);
     }
     if (result == NULL)
         return -1;
+
     tuple = PySequence_Tuple(result);
     Py_DECREF(result);
     if (tuple == NULL)

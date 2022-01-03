@@ -365,22 +365,28 @@ PyObject_Repr(PyObject *v)
 {
     if (PyErr_CheckSignals())
         return NULL;
+
 #ifdef USE_STACKCHECK
     if (PyOS_CheckStack()) {
         PyErr_SetString(PyExc_MemoryError, "stack overflow");
         return NULL;
     }
 #endif
+
     if (v == NULL)
         return PyString_FromString("<NULL>");
+
     else if (Py_TYPE(v)->tp_repr == NULL)
         return PyString_FromFormat("<%s object at %p>",
                                    Py_TYPE(v)->tp_name, v);
+
     else {
+
         PyObject *res;
         res = (*Py_TYPE(v)->tp_repr)(v);
         if (res == NULL)
             return NULL;
+
 #ifdef Py_USING_UNICODE
         if (PyUnicode_Check(res)) {
             PyObject* str;
@@ -392,6 +398,7 @@ PyObject_Repr(PyObject *v)
                 return NULL;
         }
 #endif
+
         if (!PyString_Check(res)) {
             PyErr_Format(PyExc_TypeError,
                          "__repr__ returned non-string (type %.200s)",
@@ -399,6 +406,7 @@ PyObject_Repr(PyObject *v)
             Py_DECREF(res);
             return NULL;
         }
+        
         return res;
     }
 }
