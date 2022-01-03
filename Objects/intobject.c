@@ -1056,13 +1056,17 @@ int_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 
     if (type != &PyInt_Type)
         return int_subtype_new(type, args, kwds); /* Wimp out */
+
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "|Oi:int", kwlist,
                                      &x, &base))
         return NULL;
+
     if (x == NULL)
         return PyInt_FromLong(0L);
+
     if (base == -909)
         return PyNumber_Int(x);
+
     if (PyString_Check(x)) {
         /* Since PyInt_FromString doesn't have a length parameter,
          * check here for possible NULs in the string. */
@@ -1082,12 +1086,14 @@ int_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         }
         return PyInt_FromString(string, NULL, base);
     }
+
 #ifdef Py_USING_UNICODE
     if (PyUnicode_Check(x))
         return PyInt_FromUnicode(PyUnicode_AS_UNICODE(x),
                                  PyUnicode_GET_SIZE(x),
                                  base);
 #endif
+
     PyErr_SetString(PyExc_TypeError,
                     "int() can't convert non-string with explicit base");
     return NULL;

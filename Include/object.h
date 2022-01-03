@@ -449,9 +449,18 @@ typedef struct _typeobject {
                                                      * + 此外，该属性的值，或者说 "实例（对象）存在数据 dict（对象）" 的特性，是具有继承性的
                                                      *   也就是说，如果该数据类型（对象）的实例（对象）存在数据 dict（对象），那么它的派生类型（的实例）也具有数据 dict 特性
                                                      */
-    initproc        tp_init;                        // 该类型（对象）的构造函数
-    allocfunc       tp_alloc;                       // 该类型（对象）的分配一个新的实例（对象）
-    newfunc         tp_new;
+    initproc        tp_init;                        // 该数据类型（对象）的实例（对象）构造函数
+    allocfunc       tp_alloc;                       /* 该数据类型（对象）分配一个新的实例（对象）
+                                                     * 该接口是个类的静态方法，也就是它处理的对象，是该数据类型（对象）自身，而非它的实例（对象）
+                                                     * 该接口的主要触发场景，是被该数据类型（对象）的 tp_new 接口的实现调用。
+                                                     */ 
+    newfunc         tp_new;                         /* 该数据类型（对象）创建新实例（对象）
+                                                     * 该接口是个类的静态方法，也就是它处理的对象，是该数据类型（对象）自身，而非它的实例（对象）
+                                                     * 该接口的执行入口有三个
+                                                     * - 由数据类型（对象）的自调用接口 tp_call 触发
+                                                     * - 由数据类型（对象）的 __new__ 操作符触发
+                                                     * - type(.., .., ..) 在创建动态数据类型（对象）时，会触发 matetype 的 tp_new 接口
+                                                     */
     freefunc        tp_free;                        /* Low-level free-memory routine */
     inquiry         tp_is_gc;                       /* For PyObject_IS_GC（该类型对象是否是动态创建的。内置类型对象、None、True、...等对象都是静态全局对象） */
 

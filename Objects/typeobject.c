@@ -710,13 +710,16 @@ type_repr(PyTypeObject *type)
 }
 
 // 所有数据类型（对象）的自调用处理。例如：type()、int()、str()、...
+// ! 这里的第一个参数 `type`，正常情况下，应该是 {数据类型（对象）type} 的实例（对象）
+//   但也可以是 {数据类型（对象）type} 自身，此时，{数据类型（对象）type} 作为自身的实例（对象）
+//   或者说 {数据类型（对象）type} 的数据类型就是其自身
 static PyObject *
 type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {   // @ PyType_Type.tp_call 
 
     PyObject *obj;
 
-    // 验证该 type 类型（对象）的 new 接口有效
+    // 验证该数据类型（对象）的 new 接口有效
     if (type->tp_new == NULL) {
         PyErr_Format(PyExc_TypeError,
                      "cannot create '%.100s' instances",
@@ -724,12 +727,17 @@ type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    // 调用 new 接口来创建该 type 类型的（类型实例）对象
+    // 调用 tp_new 接口来创建该数据类型的实例（对象）
     obj = type->tp_new(type, args, kwds);
     if (obj != NULL) {
 
         /* Ugly exception: when the call was type(something),
            don't call tp_init on the result. */
+        // 对于 {数据类型（对象）type} 的特殊自调用，即：type(obj)，也就是获取一个对象的类型
+        // + 此时参数 `type` 为 {数据类型（对象）type} 自身，同时入参 args 和 kwds 满足下列情况
+        //   - args 有且只有 1 个参会
+        //   - 没有 dict 参数
+        // 此时，并非创建一个新实例（对象），因此，无需执行 tp_init 初始构造处理，所以需要直接返回
         if (type == &PyType_Type &&
             PyTuple_Check(args) && PyTuple_GET_SIZE(args) == 1 &&
             (kwds == NULL ||
@@ -738,10 +746,15 @@ type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
 
         /* If the returned object is not an instance of type,
            it won't be initialized. */
+        // 如果创建的实例（对象），不是该数据类型（对象）的实例
+        // + 该情况主要发生在创建一个动态数据类型（对象）
+        // 直接返回，此时无法执行 tp_init 初始构造处理
         if (!PyType_IsSubtype(obj->ob_type, type))
             return obj;
 
-        // 执行构造函数    
+        // 执行构造函数
+        // + 这里的 ob_type 可能是当前的 `type` 派生类型
+        //   因此，需要执行 ob_type 的 tp_init 处理
         type = obj->ob_type;
         if (PyType_HasFeature(type, Py_TPFLAGS_HAVE_CLASS) &&
             type->tp_init != NULL &&
@@ -3024,13 +3037,7 @@ excess_args(PyObject *args, PyObject *kwds)
         (kwds && PyDict_Check(kwds) && PyDict_Size(kwds));
 }
 
-// 数据类型（对象）`object` 的 tp_int (初始化构造) 接口的实现
-// + 完成对该数据类型的实例（对象）的初始化构造处理
-// + `object` 作为所有数据类型（对象）的基类，它的实现，就是所有数据类型（对象）默认实现
-//   这里并没有做任何实际处理，只是对参数的有效性做了验证
-// + 关于参数
-//   - `self`
-//     + 根据 tp_init 接口规范，`self` 就是要被初始化构造的（`object` 或其派生类型的）实例（对象）
+// {数据类型（对象）object} 的 tp_init (初始化构造) 接口的实现
 static int
 object_init(PyObject *self, PyObject *args, PyObject *kwds)
 {   // @ PyBaseObject_Type.tp_init
@@ -3038,12 +3045,13 @@ object_init(PyObject *self, PyObject *args, PyObject *kwds)
     int err = 0;
 
     // 如果参数不为空
+    // 警告或报错，init 不支持构造参数
     if (excess_args(args, kwds)) {
 
         // 获取要被初始化构造的实例对象的数据类型
         PyTypeObject *type = Py_TYPE(self);
 
-        // 如果 `type` 重载了 `object` 默认的的 tp_new 和 tp_init 处理
+        // 如果 `type` 重载了默认的 tp_new 和 tp_init 实现
         if (type->tp_init != object_init &&
             type->tp_new != object_new)
         {
@@ -3051,6 +3059,7 @@ object_init(PyObject *self, PyObject *args, PyObject *kwds)
                        "object.__init__() takes no parameters",
                        1);
         }
+        // 如果 `type` 重载了默认的 tp_init
         else if (type->tp_init != object_init ||
                  type->tp_new == object_new)
         {
@@ -3062,13 +3071,10 @@ object_init(PyObject *self, PyObject *args, PyObject *kwds)
     return err;
 }
 
-// 数据类型（对象）`object` 的 tp_new (新建) 接口的实现
-// + `object` 作为所有数据类型（对象）的基类，它的实现，就是所有数据类型（对象）默认实现
-// + 关于参数
-//   - `type`
-//     + 根据 tp_new 接口规范，`type` 作为 new 新建实例的数据类型
-//       同时，它必须是该 tp_new 接口所属数据类型（对象），这里就是指 `object`，的派生类型
-//       由于 `object` 是所有数据类型（对象）的基类。因此，这里的 `type` 可以是任意的数据类型（对象）
+// {数据类型（对象）object} 的 tp_new (新建) 接口的实现
+// + 该实现用于
+//   - 创建 {数据类型（对象）object} 自身的实例（对象）
+//   - 作为动态数据类型创建其实例（对象）的默认实现
 static PyObject *
 object_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {   // @ PyBaseObject_Type.tp_new
@@ -3076,9 +3082,10 @@ object_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     int err = 0;
 
     // 如果参数不为空
+    // 警告或报错，new 不支持构造参数
     if (excess_args(args, kwds)) {
 
-        // 如果 `type` 重载了 `object` 默认的的 tp_new 和 tp_init 处理
+        // 如果 `type` 重载了默认的 tp_new 和 tp_init 实现
         if (type->tp_new != object_new &&
             type->tp_init != object_init)
         {
@@ -3086,6 +3093,7 @@ object_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
                        "object.__new__() takes no parameters",
                        1);
         }
+        // 如果 `type` 只重载了默认的 tp_new 实现
         else if (type->tp_new != object_new ||
                  type->tp_init == object_init)
         {
@@ -3919,6 +3927,7 @@ inherit_special(PyTypeObject *type, PyTypeObject *base)
             type->tp_clear = base->tp_clear;
     }
     if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_CLASS) {
+
         /* The condition below could use some explanation.
            It appears that tp_new is not inherited for static types
            whose base class is 'object'; this seems to be a precaution
@@ -3929,8 +3938,14 @@ inherit_special(PyTypeObject *type, PyTypeObject *base)
            inherit tp_new; static extension types that specify some
            other built-in type as the default are considered
            new-style-aware so they also inherit object.__new__. */
-        if (base != &PyBaseObject_Type ||
-            (type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
+        // 关于 tp_new 接口实现的继承规则
+        // - 对于动态数据类型（对象），肯定会继承
+        // - 对于静态（原生）数据类型（对象），不会从 PyBaseObject_Type（基类）继承
+        //   + PyBaseObject_Type 实现的 tp_new 接口，主要用于
+        //     - 在自身创建实例（对象）时，会进行调用
+        //     - 更重要的是，为了实现动态数据类型（对象）的实例（对象）的默认创建
+        if (base != &PyBaseObject_Type || (type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
+
             if (type->tp_new == NULL)
                 type->tp_new = base->tp_new;
         }
