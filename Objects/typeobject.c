@@ -6465,7 +6465,6 @@ resolve_slotdups(PyTypeObject *type, PyObject *name)
         pname = name;
         pp = ptrs;
 
-        // 遍历 {默认 builtin 处理接口定义描述表}
         for (p = slotdefs; p->name_strobj; p++) {
             if (p->name_strobj == name)
                 *pp++ = p;
@@ -6520,7 +6519,7 @@ update_one_slot(PyTypeObject *type, slotdef *p)
     // 遍历该 slot 接口对应的（全部）命名
     do {
 
-        // 
+        // 获取该命名的 descriptor
         descr = _PyType_Lookup(type, p->name_strobj);
         if (descr == NULL) {
             if (ptr == (void**)&type->tp_iternext) {
@@ -6529,6 +6528,7 @@ update_one_slot(PyTypeObject *type, slotdef *p)
             continue;
         }
 
+        // 如果 descriptor 是 slot wrapper 
         if (Py_TYPE(descr) == &PyWrapperDescr_Type) {
 
             void **tptr = resolve_slotdups(type, p->name_strobj);
