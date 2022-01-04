@@ -6492,6 +6492,7 @@ resolve_slotdups(PyTypeObject *type, PyObject *name)
    interests, and then stores a generic wrapper or a specific function into
    the slot.)  Return a pointer to the next slotdef with a different offset,
    because that's convenient  for fixup_slot_dispatchers(). */
+// 更新 slot 接口函数的实现
 static slotdef *
 update_one_slot(PyTypeObject *type, slotdef *p)
 {   // @ fixup_slot_dispatchers
@@ -6519,7 +6520,7 @@ update_one_slot(PyTypeObject *type, slotdef *p)
     // 遍历该 slot 接口对应的（全部）命名
     do {
 
-        // 获取该命名的 descriptor
+        // 获取该 slot 命名对应的 descriptor
         descr = _PyType_Lookup(type, p->name_strobj);
         if (descr == NULL) {
             if (ptr == (void**)&type->tp_iternext) {
@@ -6528,18 +6529,21 @@ update_one_slot(PyTypeObject *type, slotdef *p)
             continue;
         }
 
-        // 如果 descriptor 是 slot wrapper 
+        // 如果 descriptor 是 slot wrapper 对象
         if (Py_TYPE(descr) == &PyWrapperDescr_Type) {
 
             void **tptr = resolve_slotdups(type, p->name_strobj);
             if (tptr == NULL || tptr == ptr)
                 generic = p->function;
 
+            // 如果 slot wrapper 对象，和当前 slot 匹配
             d = (PyWrapperDescrObject *)descr;            
             if (d->d_base->wrapper == p->wrapper && PyType_IsSubtype(type, d->d_type))
             {
+                // 将 wrapper 处理直接绑定到 slot
                 if (specific == NULL || specific == d->d_wrapped)
                     specific = d->d_wrapped;
+                // 否则将 generic 处理绑定到 slot
                 else
                     use_generic = 1;
             }
@@ -6591,6 +6595,7 @@ update_one_slot(PyTypeObject *type, slotdef *p)
 
 /* In the type, update the slots whose slotdefs are gathered in the pp array.
    This is a callback for update_subclasses(). */
+// 更新一组 slot 接口函数的实现
 static int
 update_slots_callback(PyTypeObject *type, void *data)
 {   // @ update_slot
@@ -6648,6 +6653,7 @@ init_slotdefs(void)
 }
 
 /* Update the slots after assignment to a class (type) attribute. */
+// 当变更数据类型（对象）的（slot 操作符）属性后，同步更新该（属性对应的）slot 接口函数的实现
 static int
 update_slot(PyTypeObject *type, PyObject *name)
 {   // @ type_setattro
@@ -6665,9 +6671,10 @@ update_slot(PyTypeObject *type, PyObject *name)
        recursing into subclasses. */
     PyType_Modified(type);
 
-    // 确保 {默认 builtin 处理接口定义描述表} 初始化完成
+    // 确保 {默认 builtin slots 定义描述表} 初始化完成
     init_slotdefs();
 
+    // 遍历获取和指定（属性）命名相同的 slot 定义项
     pp = ptrs;
     for (p = slotdefs; p->name; p++) {
         /* XXX assume name is interned! */
@@ -6675,16 +6682,22 @@ update_slot(PyTypeObject *type, PyObject *name)
             *pp++ = p;
     }
     *pp = NULL;
+
+    // 遍历获取到的 slots 定义项列表
     for (pp = ptrs; *pp; pp++) {
         p = *pp;
+
+        // 查找该 slot 定义项所属分组中的第一项
         offset = p->offset;
         while (p > slotdefs && (p-1)->offset == offset)
             --p;
+
         *pp = p;
     }
     if (ptrs[0] == NULL)
         return 0; /* Not an attribute that affects any slots */
 
+    // （递归）更新该数据类型（对象）`type`，及其所有派生类型（对象）的，指定 slot 接口函数的实现
     return update_subclasses(type, name,
                              update_slots_callback, (void *)ptrs);
 }
@@ -6698,7 +6711,7 @@ fixup_slot_dispatchers(PyTypeObject *type)
 
     slotdef *p;
 
-    // 确保 {默认 builtin 处理接口定义描述表} 初始化完成
+    // 确保 {默认 builtin slots 定义描述表} 初始化完成
     init_slotdefs();
 
     for (p = slotdefs; p->name; )
@@ -6711,7 +6724,7 @@ update_all_slots(PyTypeObject* type)
 
     slotdef *p;
 
-    // 确保 {默认 builtin 处理接口定义描述表} 初始化完成
+    // 确保 {默认 builtin slots 定义描述表} 初始化完成
     init_slotdefs();
 
     for (p = slotdefs; p->name; p++) {
@@ -6731,6 +6744,8 @@ update_subclasses(PyTypeObject *type, PyObject *name,
 
     if (callback(type, data) < 0)
         return -1;
+
+    // 
     return recurse_down_subclasses(type, name, callback, data);
 }
 
