@@ -24,7 +24,8 @@ static PyObject *instance_getattr2(PyInstanceObject *, PyObject *);
 
 static PyObject *getattrstr, *setattrstr, *delattrstr;
 
-// 定义（创建）一个（数据类型为 `class` 类型的）自定义类（对象），即 class 对象
+// 定义（创建）一个自定义 class 类（对象）
+// + 也就是 {数据类型（对象）class} 的实例（对象）
 PyObject *
 PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
      /* bases is NULL or tuple of classobjects! */
@@ -33,8 +34,7 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
     PyClassObject *op, *dummy;
     static PyObject *docstr, *modstr, *namestr;
 
-    /// 初始化静态字符串常量："__doc__"、"__module__"、"__name__"
-
+    // 初始化静态字符串常量："__doc__"、"__module__"、"__name__"
     if (docstr == NULL) {
         docstr= PyString_InternFromString("__doc__");
         if (docstr == NULL)
@@ -51,7 +51,7 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
             return NULL;
     }
 
-    /// 验证 class 的 name 和 dict 属性
+    // 验证 class 的 name 和 dict 属性
     if (name == NULL || !PyString_Check(name)) {
         PyErr_SetString(PyExc_TypeError,
                         "PyClass_New: name must be a string");
@@ -82,7 +82,7 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
     }
 
     // 初始化 class 的基类
-    // + 支持多基类继承机制，基类的 type 类型必须是 class
+    // + 支持多基类继承机制，但基类必须是自定义 class 类（对象）
     if (bases == NULL) {
         bases = PyTuple_New(0);
         if (bases == NULL)
@@ -105,13 +105,18 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
         for (i = 0; i < n; i++) {
             base = PyTuple_GET_ITEM(bases, i);
 
-            // 如果基类的 type 类型不是 class 类型
-            // + 此时，如果基类的 type 类型（对象）可调用，则该基类会被视为是 metatype
+            // 如果基类不是自定义 class 类（对象），也就是它的数据类型（对象）不是 {数据类型（对象）class}
+            // + 此时，如果基类的数据类型（对象）可被调用，则该基类会被视为是 metatype
+            //   - 一般情况下，我们可以用 object、int、str ... 等内置数据类型作为基类
+            //     此时，这些内置数据类型的 `ob_type` 就是 {数据类型（对象）type}
+            //     那么，这里就相当于是调用 type(name, bases, dict) 来创建一个动态数据类型（对象）
+            //   - 当然，这个基类我们也可以随便指定为某个数据类型（对象）的实例（对象），例如：123，即 int 类型的实例（对象）
+            //     那么，这里就相当于是调用 int(name, bases, dict)，
+            //     因此会报 "int() takes at most 1 argument (3 given)" 错误
             if (!PyClass_Check(base)) {
 
-                // 由该（首次出现的）metatype 类型来负责创建该自定义类的实例对象
-                if (PyCallable_Check(
-                    (PyObject *) base->ob_type))
+                // 由该（首次出现的）metatype 数据类型（对象）来负责创建该自定义 class 类（对象）
+                if (PyCallable_Check((PyObject *) base->ob_type))
 
                     return PyObject_CallFunctionObjArgs(
                         (PyObject *) base->ob_type,
@@ -139,8 +144,8 @@ PyClass_New(PyObject *bases, PyObject *dict, PyObject *name)
             goto alloc_error;
     }
 
-    // 创建自定义类（对象）
-    // + 该类对象的 type 类型为 PyClass_Type
+    // 创建（对象）一个自定义 class 类（对象）
+    // + 它的数据类型（对象）为 PyClass_Type
     op = PyObject_GC_New(PyClassObject, &PyClass_Type);
     if (op == NULL) {
 alloc_error:
@@ -148,21 +153,23 @@ alloc_error:
         return NULL;
     }
 
-    // 设置该自定义类（对象）的基类（对象集合）
-    // + 这里的基类 bases，要么是自定义类（对象），要么是 object 类型（对象）
-    //   这里 cl_bases 属性，是 PyClassObject 的属性，不是 PyTypeObject 的 tp_bases 属性
+    // 设置该自定义 class 类（对象）的基类（对象集合）
+    // + 此时的基类 bases，要么为空，要么全都是自定义类（对象）
+    // ! 这里 cl_bases 属性，是 PyClassObject 的属性，不是 PyTypeObject 的 tp_bases 属性
     op->cl_bases = bases;
 
-    // 设置该自定义类（对象）的 dict 数据对象
+    // 设置该自定义 class 类（对象）的 dict 数据对象
+    // 也就是成员对象、属性、函数的定义
     Py_INCREF(dict);
     op->cl_dict = dict;
 
-    // 设置该自定义类（对象）的 name
+    // 设置该自定义 class 类（对象）的 name
     Py_XINCREF(name);
     op->cl_name = name;
 
     op->cl_weakreflist = NULL;
 
+    // 初始化 class 类属性访问接口的实现
     op->cl_getattr = class_lookup(op, getattrstr, &dummy);
     op->cl_setattr = class_lookup(op, setattrstr, &dummy);
     op->cl_delattr = class_lookup(op, delattrstr, &dummy);
@@ -204,13 +211,19 @@ PyMethod_Class(PyObject *im)
     return ((PyMethodObject *)im)->im_class;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// { 数据类型（对象）class} 的定义
+///////////////////////////////////////////////////////////////////////////////
+
 PyDoc_STRVAR(class_doc,
 "classobj(name, bases, dict)\n\
 \n\
 Create a class object.  The name must be a string; the second argument\n\
 a tuple of classes, and the third a dictionary.");
 
-// 创建一个自定义类（对象）
+// 创建一个自定义 class 类（对象）
+// + 事实上，{数据类型（对象）class} 并没有被作为一个内置类型而暴露给 Python 语言环境
+//   因此，这里 tp_call、tp_new 等接口，无法被 Python 语言环境直接触发
 static PyObject *
 class_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {   // @ PyClass_Type.tp_new
@@ -242,6 +255,7 @@ class_dealloc(PyClassObject *op)
     PyObject_GC_Del(op);
 }
 
+//（递归）查找
 static PyObject *
 class_lookup(PyClassObject *cp, PyObject *name, PyClassObject **pclass)
 {
@@ -251,21 +265,23 @@ class_lookup(PyClassObject *cp, PyObject *name, PyClassObject **pclass)
         *pclass = cp;
         return value;
     }
+
     n = PyTuple_Size(cp->cl_bases);
     for (i = 0; i < n; i++) {
+
         /* XXX What if one of the bases is not a class? */
-        PyObject *v = class_lookup(
-            (PyClassObject *)
-            PyTuple_GetItem(cp->cl_bases, i), name, pclass);
+        PyObject *v = class_lookup((PyClassObject *)PyTuple_GetItem(cp->cl_bases, i), name, pclass);
         if (v != NULL)
             return v;
     }
+
     return NULL;
 }
 
 static PyObject *
 class_getattr(register PyClassObject *op, PyObject *name)
-{
+{   // @ PyClass_Type.tp_getattro
+
     register PyObject *v;
     register char *sname = PyString_AsString(name);
     PyClassObject *klass;
@@ -320,7 +336,9 @@ set_slot(PyObject **slot, PyObject *v)
 
 static void
 set_attr_slots(PyClassObject *c)
-{
+{   // @ set_dict
+    // @ set_bases
+
     PyClassObject *dummy;
 
     set_slot(&c->cl_getattr, class_lookup(c, getattrstr, &dummy));
@@ -330,7 +348,8 @@ set_attr_slots(PyClassObject *c)
 
 static char *
 set_dict(PyClassObject *c, PyObject *v)
-{
+{   // @ class_setattr
+
     if (v == NULL || !PyDict_Check(v))
         return "__dict__ must be a dictionary object";
     set_slot(&c->cl_dict, v);
@@ -340,7 +359,8 @@ set_dict(PyClassObject *c, PyObject *v)
 
 static char *
 set_bases(PyClassObject *c, PyObject *v)
-{
+{   // @ class_setattr
+
     Py_ssize_t i, n;
 
     if (v == NULL || !PyTuple_Check(v))
@@ -360,7 +380,8 @@ set_bases(PyClassObject *c, PyObject *v)
 
 static char *
 set_name(PyClassObject *c, PyObject *v)
-{
+{   // @ class_setattr
+
     if (v == NULL || !PyString_Check(v))
         return "__name__ must be a string object";
     if (strlen(PyString_AS_STRING(v)) != (size_t)PyString_GET_SIZE(v))
@@ -371,7 +392,7 @@ set_name(PyClassObject *c, PyObject *v)
 
 static int
 class_setattr(PyClassObject *op, PyObject *name, PyObject *v)
-{
+{   // @ PyClass_Type.tp_setattro
     char *sname;
     if (PyEval_GetRestricted()) {
         PyErr_SetString(PyExc_RuntimeError,
@@ -419,7 +440,8 @@ class_setattr(PyClassObject *op, PyObject *name, PyObject *v)
 
 static PyObject *
 class_repr(PyClassObject *op)
-{
+{   // @ PyClass_Type.tp_repr
+
     PyObject *mod = PyDict_GetItemString(op->cl_dict, "__module__");
     char *name;
     if (op->cl_name == NULL || !PyString_Check(op->cl_name))
@@ -436,7 +458,8 @@ class_repr(PyClassObject *op)
 
 static PyObject *
 class_str(PyClassObject *op)
-{
+{   // @ PyClass_Type.tp_str
+
     PyObject *mod = PyDict_GetItemString(op->cl_dict, "__module__");
     PyObject *name = op->cl_name;
     PyObject *res;
@@ -463,7 +486,8 @@ class_str(PyClassObject *op)
 
 static int
 class_traverse(PyClassObject *o, visitproc visit, void *arg)
-{
+{   // @ PyClass_Type.tp_traverse
+
     Py_VISIT(o->cl_bases);
     Py_VISIT(o->cl_dict);
     Py_VISIT(o->cl_name);
@@ -515,13 +539,18 @@ PyTypeObject PyClass_Type = {
     class_new,                                  /* tp_new */
 };
 
+//-----------------------------------------------------------------------------
+
+// 判断 klass 是否是 base 的派生类
 int
 PyClass_IsSubclass(PyObject *klass, PyObject *base)
 {
     Py_ssize_t i, n;
     PyClassObject *cp;
+
     if (klass == base)
         return 1;
+
     if (PyTuple_Check(base)) {
         n = PyTuple_GET_SIZE(base);
         for (i = 0; i < n; i++) {
@@ -530,24 +559,26 @@ PyClass_IsSubclass(PyObject *klass, PyObject *base)
         }
         return 0;
     }
+
     if (klass == NULL || !PyClass_Check(klass))
         return 0;
     cp = (PyClassObject *)klass;
+
+    // 遍历 klass 的所有基类
     n = PyTuple_Size(cp->cl_bases);
     for (i = 0; i < n; i++) {
         if (PyClass_IsSubclass(PyTuple_GetItem(cp->cl_bases, i), base))
             return 1;
     }
+
     return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Instance 类型（对象）
-///////////////////////////////////////////////////////////////////////////////
 
 /* Instance objects */
 
-// 新建一个 class 类的实例（对象）
+// 创建一个自定义 class 类（对象）的实例（对象）
 PyObject *
 PyInstance_NewRaw(PyObject *klass, PyObject *dict)
 {   // @ extern
@@ -556,7 +587,7 @@ PyInstance_NewRaw(PyObject *klass, PyObject *dict)
 
     PyInstanceObject *inst;
 
-    // 验证 klass 的 type 类型为 class
+    // 验证 klass 的数据类型（对象）为 class
     // + 只有 class 类型，才可以创建类实例对象
     if (!PyClass_Check(klass)) {
         PyErr_BadInternalCall();
@@ -578,7 +609,7 @@ PyInstance_NewRaw(PyObject *klass, PyObject *dict)
     }
 
     // 动态创建一个类实例对象
-    // + 该实例对象的 type 类型为 PyInstance_Type
+    // + 该实例对象的数据类型（对象）为 PyInstance_Type
     inst = PyObject_GC_New(PyInstanceObject, &PyInstance_Type);
     if (inst == NULL) {
         Py_DECREF(dict);
@@ -599,7 +630,8 @@ PyInstance_NewRaw(PyObject *klass, PyObject *dict)
 
 PyObject *
 PyInstance_New(PyObject *klass, PyObject *arg, PyObject *kw)
-{   // @ PyClass_Type.tp_call
+{   // @ extern
+    // @ PyClass_Type.tp_call
 
     register PyInstanceObject *inst;
     PyObject *init;
@@ -655,6 +687,10 @@ PyInstance_New(PyObject *klass, PyObject *arg, PyObject *kw)
     }
     return (PyObject *)inst;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// {数据类型（对象）instance} 的定义
+///////////////////////////////////////////////////////////////////////////////
 
 /* Instance methods */
 
@@ -777,7 +813,8 @@ instance_dealloc(register PyInstanceObject *inst)
 
 static PyObject *
 instance_getattr1(register PyInstanceObject *inst, PyObject *name)
-{
+{   // @ instance_getattr
+
     register PyObject *v;
     register char *sname = PyString_AsString(name);
     if (sname[0] == '_' && sname[1] == '_') {
@@ -2615,7 +2652,8 @@ getclassname(PyObject *klass, char *buf, int bufsize)
 
 static void
 getinstclassname(PyObject *inst, char *buf, int bufsize)
-{
+{   // @ instancemethod_call
+
     PyObject *klass;
 
     if (inst == NULL) {
