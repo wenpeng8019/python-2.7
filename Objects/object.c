@@ -208,6 +208,8 @@ _Py_NegativeRefcount(const char *fname, int lineno, PyObject *op)
 #endif /* Py_REF_DEBUG */
 
 ///////////////////////////////////////////////////////////////////////////////
+// 数据对象和生命周期相关的操作
+///////////////////////////////////////////////////////////////////////////////
 
 // 增加数据对象的引用计数
 void
@@ -223,7 +225,8 @@ Py_DecRef(PyObject *o)
     Py_XDECREF(o);
 }
 
-// 初始化设置数据对象的数据类型（对象）
+// 初始化一个（固定结构体的）数据对象
+// + 包括所属数据类型（对象）
 PyObject *
 PyObject_Init(PyObject *op, PyTypeObject *tp)
 {
@@ -236,18 +239,23 @@ PyObject_Init(PyObject *op, PyTypeObject *tp)
     return op;
 }
 
+// 初始化一个（可变结构体的）数据对象
+// + 包括所属数据类型（对象）、以及可变部分到尺寸大小
 PyVarObject *
 PyObject_InitVar(PyVarObject *op, PyTypeObject *tp, Py_ssize_t size)
 {
     if (op == NULL)
         return (PyVarObject *) PyErr_NoMemory();
+
     /* Any changes should be reflected in PyObject_INIT_VAR */
     op->ob_size = size;
     Py_TYPE(op) = tp;
     _Py_NewReference((PyObject *)op);
+
     return op;
 }
 
+// 创建一个（固定结构体的）数据对象
 PyObject *
 _PyObject_New(PyTypeObject *tp)
 {
@@ -258,6 +266,7 @@ _PyObject_New(PyTypeObject *tp)
     return PyObject_INIT(op, tp);
 }
 
+// 创建一个（可变结构体的）数据对象
 PyVarObject *
 _PyObject_NewVar(PyTypeObject *tp, Py_ssize_t nitems)
 {
@@ -270,12 +279,17 @@ _PyObject_NewVar(PyTypeObject *tp, Py_ssize_t nitems)
 }
 
 /* for binary compatibility with 2.2 */
+// 删除一个数据对象
 #undef _PyObject_Del
 void
 _PyObject_Del(PyObject *op)
 {
     PyObject_FREE(op);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// 数据对象和展示、表示、输出相关的操作
+///////////////////////////////////////////////////////////////////////////////
 
 /* Implementation of PyObject_Print with recursion checking */
 static int
@@ -340,7 +354,6 @@ PyObject_Print(PyObject *op, FILE *fp, int flags)
 {
     return internal_print(op, fp, flags, 0);
 }
-
 
 /* For debugging convenience.  See Misc/gdbinit for some useful gdb hooks */
 void _PyObject_Dump(PyObject* op)
@@ -563,6 +576,9 @@ PyObject_Unicode(PyObject *v)
 }
 #endif
 
+///////////////////////////////////////////////////////////////////////////////
+// 数据对象和比较、比对相关的操作
+///////////////////////////////////////////////////////////////////////////////
 
 /* Helper to warn about deprecated tp_compare return values.  Return:
    -2 for an exception;
@@ -1026,6 +1042,10 @@ PyObject_RichCompareBool(PyObject *v, PyObject *w, int op)
     return ok;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// 数据对象和 Hash 值计算相关的操作
+///////////////////////////////////////////////////////////////////////////////
+
 /* Set of hash utility functions to help maintaining the invariant that
     if a==b then hash(a)==hash(b)
 
@@ -1138,6 +1158,10 @@ PyObject_Hash(PyObject *v)
     /* If there's a cmp but no hash defined, the object can't be hashed */
     return PyObject_HashNotImplemented(v);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// 数据对象的属性访问操作
+///////////////////////////////////////////////////////////////////////////////
 
 PyObject *
 PyObject_GetAttrString(PyObject *v, const char *name)
@@ -1329,27 +1353,6 @@ _PyObject_GetDictPtr(PyObject *obj)
     
     // (根据 dict 地址偏移量) 返回 dict 对象
     return (PyObject **) ((char *)obj + dictoffset);
-}
-
-PyObject *
-PyObject_SelfIter(PyObject *obj)
-{
-    Py_INCREF(obj);
-    return obj;
-}
-
-/* Helper used when the __next__ method is removed from a type:
-   tp_iternext is never NULL and can be safely called without checking
-   on every iteration.
- */
-
-PyObject *
-_PyObject_NextNotImplemented(PyObject *self)
-{
-    PyErr_Format(PyExc_TypeError,
-                 "'%.200s' object is not iterable",
-                 Py_TYPE(self)->tp_name);
-    return NULL;
 }
 
 /* Generic GetAttr functions - put these in your tp_[gs]etattro slot */
@@ -1633,6 +1636,34 @@ PyObject_GenericSetAttr(PyObject *obj, PyObject *name, PyObject *value)
     return _PyObject_GenericSetAttrWithDict(obj, name, value, NULL);
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// 数据对象和迭代、遍历相关的操作
+///////////////////////////////////////////////////////////////////////////////
+
+PyObject *
+PyObject_SelfIter(PyObject *obj)
+{
+    Py_INCREF(obj);
+    return obj;
+}
+
+/* Helper used when the __next__ method is removed from a type:
+   tp_iternext is never NULL and can be safely called without checking
+   on every iteration.
+ */
+
+PyObject *
+_PyObject_NextNotImplemented(PyObject *self)
+{
+    PyErr_Format(PyExc_TypeError,
+                 "'%.200s' object is not iterable",
+                 Py_TYPE(self)->tp_name);
+    return NULL;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// 数据对象的逻辑值判定
+///////////////////////////////////////////////////////////////////////////////
 
 /* Test a value used as condition, e.g., in a for or if statement.
    Return -1 if an error occurred */
@@ -1748,6 +1779,10 @@ PyCallable_Check(PyObject *x)
         return x->ob_type->tp_call != NULL;
     }
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// 数据对象所属目录（域）的计算
+///////////////////////////////////////////////////////////////////////////////
 
 /* ------------------------- PyObject_Dir() helpers ------------------------- */
 
@@ -2061,6 +2096,10 @@ PyObject_Dir(PyObject *obj)
     return result;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// 数据对象 None、及其数据类型（对象）PyNone_Type 的定义
+///////////////////////////////////////////////////////////////////////////////
+
 /*
 NoObject is usable as a non-NULL undefined value, used by the macro None.
 There is (and should be!) no way to create other objects of this type,
@@ -2108,6 +2147,10 @@ PyObject _Py_NoneStruct = {
   1, &PyNone_Type
 };
 
+///////////////////////////////////////////////////////////////////////////////
+// 数据对象 NotImplemented、及其数据类型（对象）PyNotImplemented_Type 的定义
+///////////////////////////////////////////////////////////////////////////////
+
 /* NotImplemented is an object that can be used to signal that an
    operation is not implemented for the given type combination. */
 
@@ -2138,6 +2181,10 @@ PyObject _Py_NotImplementedStruct = {
     _PyObject_EXTRA_INIT
     1, &PyNotImplemented_Type
 };
+
+///////////////////////////////////////////////////////////////////////////////
+// 所有内置数据类型的 ready 初始化
+///////////////////////////////////////////////////////////////////////////////
 
 void
 _Py_ReadyTypes(void)
@@ -2277,6 +2324,11 @@ _Py_ReadyTypes(void)
         Py_FatalError("Can't initialize file type");
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// 其他系统内部相关处理
+///////////////////////////////////////////////////////////////////////////////
+
+/// 和内部调试统计和输出相关的处理
 
 #ifdef Py_TRACE_REFS
 
@@ -2382,6 +2434,7 @@ _Py_GetObjects(PyObject *self, PyObject *args)
 
 #endif
 
+/// 一些内部 hack 处理
 
 /* Hack to force loading of capsule.o */
 PyTypeObject *_Py_capsule_hack = &PyCapsule_Type;
@@ -2394,6 +2447,8 @@ PyTypeObject *_Py_cobject_hack = &PyCObject_Type;
 /* Hack to force loading of abstract.o */
 Py_ssize_t (*_Py_abstract_hack)(PyObject *) = PyObject_Size;
 
+
+/// 对外内存管理接口的实现
 
 /* Python's malloc wrappers (see pymem.h) */
 
@@ -2415,6 +2470,7 @@ PyMem_Free(void *p)
     PyMem_FREE(p);
 }
 
+/// 和 repr session（会话）相关的处理
 
 /* These methods are used to control infinite recursion in repr, str, print,
    etc.  Container objects that may recursively contain themselves,
@@ -2480,6 +2536,8 @@ Py_ReprLeave(PyObject *obj)
         }
     }
 }
+
+/// 和 Trash 相关的处理
 
 /* Trashcan support. */
 
