@@ -414,6 +414,7 @@ mro_subclasses(PyTypeObject *type, PyObject* temp)
     return 0;
 }
 
+// 变更 *动态* 数据类型（对象）`type` 的基类
 static int
 type_set_bases(PyTypeObject *type, PyObject *value, void *context)
 {
@@ -423,31 +424,42 @@ type_set_bases(PyTypeObject *type, PyObject *value, void *context)
     PyTypeObject *new_base, *old_base;
     PyObject *old_bases, *old_mro;
 
+    // 验证数据类型（对象）`type` 必须是动态创建的数据类型（对象）
+    // + 内置（静态）数据类型对象，无法变更其基类
     if (!(type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
         PyErr_Format(PyExc_TypeError,
                      "can't set %s.__bases__", type->tp_name);
         return -1;
     }
+
+    /// 验证更新后的值（基类对象）有效
+
+    // 不能为空
     if (!value) {
         PyErr_Format(PyExc_TypeError,
                      "can't delete %s.__bases__", type->tp_name);
         return -1;
     }
+    // 必须是 tuple 类型
     if (!PyTuple_Check(value)) {
         PyErr_Format(PyExc_TypeError,
              "can only assign tuple to %s.__bases__, not %s",
                  type->tp_name, Py_TYPE(value)->tp_name);
         return -1;
     }
+    // tuple 不能为空
     if (PyTuple_GET_SIZE(value) == 0) {
         PyErr_Format(PyExc_TypeError,
              "can only assign non-empty tuple to %s.__bases__, not ()",
                  type->tp_name);
         return -1;
     }
+    // tuple 中的每一项，要么是数据类型（对象）、要么是自定义类（对象）
     for (i = 0; i < PyTuple_GET_SIZE(value); i++) {
         ob = PyTuple_GET_ITEM(value, i);
+
         if (!PyClass_Check(ob) && !PyType_Check(ob)) {
+            
             PyErr_Format(
                 PyExc_TypeError,
     "%s.__bases__ must be tuple of old- or new-style classes, not '%s'",
@@ -463,35 +475,40 @@ type_set_bases(PyTypeObject *type, PyObject *value, void *context)
         }
     }
 
+    // 计算获取直接基类
     new_base = best_base(value);
-
     if (!new_base) {
         return -1;
     }
 
+    // 验证变更前后的基类的兼容性
     if (!compatible_for_assignment(type->tp_base, new_base, "__bases__"))
         return -1;
+
+    /// 执行变更处理
 
     Py_INCREF(new_base);
     Py_INCREF(value);
 
+    // 记录之前的值
     old_bases = type->tp_bases;
     old_base = type->tp_base;
     old_mro = type->tp_mro;
 
+    // 修改为新值
     type->tp_bases = value;
     type->tp_base = new_base;
 
+    // 构建继承路径
     if (mro_internal(type) < 0) {
         goto bail;
     }
 
+    // 更新所有派生类型（对象）的继承路径
     temp = PyList_New(0);
     if (!temp)
         goto bail;
-
     r = mro_subclasses(type, temp);
-
     if (r < 0) {
         for (i = 0; i < PyList_Size(temp); i++) {
             PyTypeObject* cls;
@@ -506,7 +523,6 @@ type_set_bases(PyTypeObject *type, PyObject *value, void *context)
         Py_DECREF(temp);
         goto bail;
     }
-
     Py_DECREF(temp);
 
     /* any base that was in __bases__ but now isn't, we
@@ -517,6 +533,7 @@ type_set_bases(PyTypeObject *type, PyObject *value, void *context)
     /* for now, sod that: just remove from all old_bases,
        add to all new_bases */
 
+    // 解除数据类型（对象）`type` 和旧基类之间的关系引用
     for (i = PyTuple_GET_SIZE(old_bases) - 1; i >= 0; i--) {
         ob = PyTuple_GET_ITEM(old_bases, i);
         if (PyType_Check(ob)) {
@@ -525,6 +542,7 @@ type_set_bases(PyTypeObject *type, PyObject *value, void *context)
         }
     }
 
+    // 建立数据类型（对象）`type` 和新基类之间的关系引用
     for (i = PyTuple_GET_SIZE(value) - 1; i >= 0; i--) {
         ob = PyTuple_GET_ITEM(value, i);
         if (PyType_Check(ob)) {
@@ -533,6 +551,7 @@ type_set_bases(PyTypeObject *type, PyObject *value, void *context)
         }
     }
 
+    //（基于新的基类）同步更新所有 slots 接口函数的实现
     update_all_slots(type);
 
     Py_DECREF(old_bases);
@@ -3237,6 +3256,9 @@ object_str(PyObject *self)
     return f(self);
 }
 
+// {数据类型（对象）object} 的 {成员属性} 定义
+//-----------------------------------------------------------------------------
+
 // {数据类型（对象）object} 的实例（对象）的获取 __class__ 属性的（默认）实现
 static PyObject *
 object_get_class(PyObject *self, void *closure)
@@ -3383,12 +3405,15 @@ object_set_class(PyObject *self, PyObject *value, void *closure)
     }
 }
 
+
 static PyGetSetDef object_getsets[] = {
     {"__class__", object_get_class, object_set_class,
      PyDoc_STR("the object's class")},
     {0}
 };
 
+// {数据类型（对象）object} 的 {成员方法} 定义
+//-----------------------------------------------------------------------------
 
 /* Stuff to implement __reduce_ex__ for pickle protocols >= 2.
    We fall back to helpers in copy_reg for:
@@ -3781,6 +3806,7 @@ static PyMethodDef object_methods[] = {
     {0}
 };
 
+//-----------------------------------------------------------------------------
 
 PyTypeObject PyBaseObject_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
@@ -3825,7 +3851,7 @@ PyTypeObject PyBaseObject_Type = {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-// 初始化一个数据类型（对象）
+// 数据类型（对象）的内置（通用）机制
 ///////////////////////////////////////////////////////////////////////////////
 
 /* Initialize the __dict__ in a type object */
@@ -6146,7 +6172,7 @@ slot_tp_del(PyObject *self)
 }
 
 //-----------------------------------------------------------------------------
-// 数据类型（对象）的 builtin slots 定义
+// 数据类型（对象）的 builtin slots 的定义、及其维护
 //-----------------------------------------------------------------------------
 
 /* Table mapping __foo__ names to tp_foo offsets and slot_tp_foo wrapper
@@ -6718,6 +6744,8 @@ fixup_slot_dispatchers(PyTypeObject *type)
         p = update_one_slot(type, p);
 }
 
+// 同步更新该数据类型（对象）的所有 slots 接口函数的实现
+// + 触发该处理的场景是：变更了该数据类型（对象）的基类后
 static void
 update_all_slots(PyTypeObject* type)
 {   // @ type_set_bases
@@ -6727,7 +6755,9 @@ update_all_slots(PyTypeObject* type)
     // 确保 {默认 builtin slots 定义描述表} 初始化完成
     init_slotdefs();
 
+    // 遍历所有 slots 的定义项
     for (p = slotdefs; p->name; p++) {
+
         /* update_slot returns int but can't actually fail */
         update_slot(type, p->name_strobj);
     }
@@ -6737,18 +6767,21 @@ update_all_slots(PyTypeObject* type)
    recursive functions to call a callback for all subclasses,
    but refraining from recursing into subclasses that define 'name'. */
 
+// （递归）更新数据类型（对象）`type`，及其所有派生类型（对象）的，指定 slot 接口函数的实现
 static int
 update_subclasses(PyTypeObject *type, PyObject *name,
                   update_callback callback, void *data)
 {   // @ update_slot
 
+    // 更新数据类型（对象）`type` 的，指定 slot 接口函数的实现
     if (callback(type, data) < 0)
         return -1;
 
-    // 
+    //（递归）更新所有派生类型（对象）的，指定 slot 接口函数的实现
     return recurse_down_subclasses(type, name, callback, data);
 }
 
+//（递归）更新所有派生类型（对象）的，指定 slot 接口函数的实现
 static int
 recurse_down_subclasses(PyTypeObject *type, PyObject *name,
                         update_callback callback, void *data)
@@ -6759,9 +6792,12 @@ recurse_down_subclasses(PyTypeObject *type, PyObject *name,
     PyObject *ref, *subclasses, *dict;
     Py_ssize_t i, n;
 
+    // 如果没有派生类型，直接返回
     subclasses = type->tp_subclasses;
     if (subclasses == NULL)
         return 0;
+
+    // 遍历派生类型（对象）
     assert(PyList_Check(subclasses));
     n = PyList_GET_SIZE(subclasses);
     for (i = 0; i < n; i++) {
@@ -6769,14 +6805,19 @@ recurse_down_subclasses(PyTypeObject *type, PyObject *name,
         assert(PyWeakref_CheckRef(ref));
         subclass = (PyTypeObject *)PyWeakref_GET_OBJECT(ref);
         assert(subclass != NULL);
+
+        // 该派生类型已经失效（如：析构）
         if ((PyObject *)subclass == Py_None)
             continue;
         assert(PyType_Check(subclass));
+
         /* Avoid recursing down into unaffected classes */
+        // 如果派生类型指定了自己的 slot 接口函数的实现
         dict = subclass->tp_dict;
         if (dict != NULL && PyDict_Check(dict) &&
             PyDict_GetItem(dict, name) != NULL)
             continue;
+
         if (update_subclasses(subclass, name, callback, data) < 0)
             return -1;
     }
