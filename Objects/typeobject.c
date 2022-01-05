@@ -147,6 +147,52 @@ PyType_ClearCache(void)
     return cur_version_tag;
 }
 
+static PyObject *
+class_name(PyObject *cls)
+{   // @ set_mro_error
+    // @ check_duplicates
+    //   @ mro_implementation
+
+    PyObject *name = PyObject_GetAttrString(cls, "__name__");
+    if (name == NULL) {
+        PyErr_Clear();
+        Py_XDECREF(name);
+        name = PyObject_Repr(cls);
+    }
+    if (name == NULL)
+        return NULL;
+    if (!PyString_Check(name)) {
+        Py_DECREF(name);
+        return NULL;
+    }
+    return name;
+}
+
+static int
+check_duplicates(PyObject *list)
+{   // @ mro_implementation
+
+    Py_ssize_t i, j, n;
+    /* Let's use a quadratic time algorithm,
+       assuming that the bases lists is short.
+    */
+    n = PyList_GET_SIZE(list);
+    for (i = 0; i < n; i++) {
+        PyObject *o = PyList_GET_ITEM(list, i);
+        for (j = i + 1; j < n; j++) {
+            if (PyList_GET_ITEM(list, j) == o) {
+                o = class_name(o);
+                PyErr_Format(PyExc_TypeError,
+                             "duplicate base class %s",
+                             o ? PyString_AS_STRING(o) : "?");
+                Py_XDECREF(o);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
 /* Raise a TypeError for an MRO order disagreement.
 
    It's hard to produce a good error message.  In the absence of better
@@ -159,6 +205,7 @@ PyType_ClearCache(void)
 static void
 set_mro_error(PyObject *to_merge, int *remain)
 {   // @ pmerge
+    //   @ mro_implementation
 
     Py_ssize_t i, n, off, to_merge_size;
     char buf[1000];
@@ -353,7 +400,7 @@ mro_implementation(PyTypeObject *type)
 
 static PyObject *
 mro_external(PyObject *self)
-{   // @ type_methods['mro']
+{   // @ PyType_Type.tp_methods.mro
 
     PyTypeObject *type = (PyTypeObject *)self;
 
@@ -500,7 +547,8 @@ static PyMemberDef type_members[] = {
 
 static PyObject *
 type_name(PyTypeObject *type, void *context)
-{
+{   // @ PyType_Type.tp_getsets.__name__
+
     const char *s;
 
     if (type->tp_flags & Py_TPFLAGS_HEAPTYPE) {
@@ -521,7 +569,8 @@ type_name(PyTypeObject *type, void *context)
 
 static int
 type_set_name(PyTypeObject *type, PyObject *value, void *context)
-{
+{   // @ PyType_Type.tp_getsets.__name__
+
     PyHeapTypeObject* et;
 
     if (!(type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
@@ -561,7 +610,8 @@ type_set_name(PyTypeObject *type, PyObject *value, void *context)
 
 static PyObject *
 type_module(PyTypeObject *type, void *context)
-{
+{   // @ PyType_Type.tp_getsets.__module__
+
     PyObject *mod;
     char *s;
 
@@ -585,7 +635,8 @@ type_module(PyTypeObject *type, void *context)
 
 static int
 type_set_module(PyTypeObject *type, PyObject *value, void *context)
-{
+{   // @ PyType_Type.tp_getsets.__module__
+
     if (!(type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
         PyErr_Format(PyExc_TypeError,
                      "can't set %s.__module__", type->tp_name);
@@ -604,7 +655,8 @@ type_set_module(PyTypeObject *type, PyObject *value, void *context)
 
 static PyObject *
 type_abstractmethods(PyTypeObject *type, void *context)
-{
+{   // @ PyType_Type.tp_getsets.__abstractmethods__
+
     PyObject *mod = NULL;
     /* type itself has an __abstractmethods__ descriptor (this). Don't return
        that. */
@@ -620,7 +672,8 @@ type_abstractmethods(PyTypeObject *type, void *context)
 
 static int
 type_set_abstractmethods(PyTypeObject *type, PyObject *value, void *context)
-{
+{   // @ PyType_Type.tp_getsets.__abstractmethods__
+
     /* __abstractmethods__ should only be set once on a type, in
        abc.ABCMeta.__new__, so this function doesn't do anything
        special to update subclasses.
@@ -650,13 +703,14 @@ type_set_abstractmethods(PyTypeObject *type, PyObject *value, void *context)
 
 static PyObject *
 type_get_bases(PyTypeObject *type, void *context)
-{
+{   // @ PyType_Type.tp_getsets.__bases__
+
     Py_INCREF(type->tp_bases);
     return type->tp_bases;
 }
 
 static PyTypeObject *best_base(PyObject *);
-static int mro_internal(PyTypeObject *);
+//static int mro_internal(PyTypeObject *);
 static int compatible_for_assignment(PyTypeObject *, PyTypeObject *, char *);
 static int add_subclass(PyTypeObject*, PyTypeObject*);
 static void remove_subclass(PyTypeObject *, PyTypeObject *);
@@ -668,9 +722,11 @@ static int update_subclasses(PyTypeObject *type, PyObject *name,
 static int recurse_down_subclasses(PyTypeObject *type, PyObject *name,
                                    update_callback callback, void *data);
 
+// (递归)
 static int
 mro_subclasses(PyTypeObject *type, PyObject* temp)
-{
+{   // @ type_set_bases
+
     PyTypeObject *subclass;
     PyObject *ref, *subclasses, *old_mro;
     Py_ssize_t i, n;
@@ -709,10 +765,12 @@ mro_subclasses(PyTypeObject *type, PyObject* temp)
     return 0;
 }
 
-// 变更 *动态* 数据类型（对象）`type` 的基类
+// 变更数据类型（对象）的基类
+// ! 只能变更 *动态* 数据类型（对象）的基类
 static int
 type_set_bases(PyTypeObject *type, PyObject *value, void *context)
-{
+{   // @ PyType_Type.tp_getsets.__bases__
+
     Py_ssize_t i;
     int r = 0;
     PyObject *ob, *temp;
@@ -871,7 +929,8 @@ type_set_bases(PyTypeObject *type, PyObject *value, void *context)
 
 static PyObject *
 type_dict(PyTypeObject *type, void *context)
-{
+{   // @ PyType_Type.tp_getsets.__dict__
+
     if (type->tp_dict == NULL) {
         Py_INCREF(Py_None);
         return Py_None;
@@ -881,7 +940,8 @@ type_dict(PyTypeObject *type, void *context)
 
 static PyObject *
 type_get_doc(PyTypeObject *type, void *context)
-{
+{   // @ PyType_Type.tp_getsets.__doc__
+
     PyObject *result;
     if (!(type->tp_flags & Py_TPFLAGS_HEAPTYPE) && type->tp_doc != NULL)
         return PyString_FromString(type->tp_doc);
@@ -915,7 +975,8 @@ static PyGetSetDef type_getsets[] = {
 
 static PyObject *
 type___instancecheck__(PyObject *type, PyObject *inst)
-{
+{   // @ PyType_Type.tp_methods.__instancecheck__
+
     switch (_PyObject_RealIsInstance(inst, type)) {
     case -1:
         return NULL;
@@ -929,7 +990,8 @@ type___instancecheck__(PyObject *type, PyObject *inst)
 
 static PyObject *
 type___subclasscheck__(PyObject *type, PyObject *inst)
-{
+{   // @ PyType_Type.tp_methods.__subclasscheck__
+
     switch (_PyObject_RealIsSubclass(inst, type)) {
     case -1:
         return NULL;
@@ -942,7 +1004,8 @@ type___subclasscheck__(PyObject *type, PyObject *inst)
 
 static PyObject *
 type_subclasses(PyTypeObject *type, PyObject *args_ignored)
-{
+{   // @ PyType_Type.tp_methods.__subclasses__
+
     PyObject *list, *raw, *ref;
     Py_ssize_t i, n;
 
@@ -1766,48 +1829,6 @@ tail_contains(PyObject *list, int whence, PyObject *o) {
     for (j = whence+1; j < size; j++) {
         if (PyList_GET_ITEM(list, j) == o)
             return 1;
-    }
-    return 0;
-}
-
-static PyObject *
-class_name(PyObject *cls)
-{
-    PyObject *name = PyObject_GetAttrString(cls, "__name__");
-    if (name == NULL) {
-        PyErr_Clear();
-        Py_XDECREF(name);
-        name = PyObject_Repr(cls);
-    }
-    if (name == NULL)
-        return NULL;
-    if (!PyString_Check(name)) {
-        Py_DECREF(name);
-        return NULL;
-    }
-    return name;
-}
-
-static int
-check_duplicates(PyObject *list)
-{
-    Py_ssize_t i, j, n;
-    /* Let's use a quadratic time algorithm,
-       assuming that the bases lists is short.
-    */
-    n = PyList_GET_SIZE(list);
-    for (i = 0; i < n; i++) {
-        PyObject *o = PyList_GET_ITEM(list, i);
-        for (j = i + 1; j < n; j++) {
-            if (PyList_GET_ITEM(list, j) == o) {
-                o = class_name(o);
-                PyErr_Format(PyExc_TypeError,
-                             "duplicate base class %s",
-                             o ? PyString_AS_STRING(o) : "?");
-                Py_XDECREF(o);
-                return -1;
-            }
-        }
     }
     return 0;
 }
@@ -2701,6 +2722,7 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
     }
 
     /* Put the proper slots in place */
+    // 初始化该动态数据类型（对象）的（所有）slot 接口的实现
     fixup_slot_dispatchers(type);
 
     return (PyObject *)type;
@@ -3035,12 +3057,11 @@ PyTypeObject PyType_Type = {
 
 /* The base type of all types (eventually)... except itself. */
 
-/* {数据类型（对象）object} 是，除了它自身以外的，所有数据类型（对象）的最终基类
+/* {数据类型（对象）object} ，是除了它自身以外的，所有数据类型（对象）的最终基类
  * + 由于 {数据类型（对象）object} 是所有数据类型（对象）的基类，
- *   而数据类型（对象）定义的接口，又会作为其实例（对象）的类函数定义
- *   因此，{数据类型（对象）object} 实现的接口，相当于所有实例（对象）的默认功能实现
+ *   而数据类型（对象）定义的成员操作、成员对象、成员属性、和成员函数，又会作为其实例（对象）的成员定义
+ *   因此，由 {数据类型（对象）object} 实现的成员定义，就相当于所有实例（对象）的默认成员定义项
  */
-
 
 // {数据类型（对象）object} 的 {成员操作} 定义
 //-----------------------------------------------------------------------------
@@ -3096,7 +3117,7 @@ excess_args(PyObject *args, PyObject *kwds)
         (kwds && PyDict_Check(kwds) && PyDict_Size(kwds));
 }
 
-// {数据类型（对象）object} 的实例（对象）的初始构造接口的（默认）实现
+// 初始化构造操作的（默认）实现
 static int
 object_init(PyObject *self, PyObject *args, PyObject *kwds)
 {   // @ PyBaseObject_Type.tp_init
@@ -3128,10 +3149,10 @@ object_init(PyObject *self, PyObject *args, PyObject *kwds)
     return err;
 }
 
-// {数据类型（对象）object} 的 tp_new (新建) 接口的实现
-// + 该实现用于
+// 创建数据实例（对象）操作的（默认）实现
+// ! 注意，该操作只适用于
 //   - 创建 {数据类型（对象）object} 自身的实例（对象）
-//   - 作为动态数据类型创建其实例（对象）的默认实现
+//   - 作为 *动态*数据类型（对象）创建其实例（对象）的（默认）实现
 static PyObject *
 object_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {   // @ PyBaseObject_Type.tp_new
@@ -3219,41 +3240,50 @@ object_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     return type->tp_alloc(type, 0);
 }
 
-// {数据类型（对象）object} 的实例（对象）的内存回收接口的（默认）实现
+// 回收操作的（默认）实现
 static void
 object_dealloc(PyObject *self)
-{
+{   // @ PyBaseObject_Type.tp_dealloc
+
     Py_TYPE(self)->tp_free(self);
 }
 
-// {数据类型（对象）object} 的实例（对象）的 repr 输出接口的（默认）实现
+// 展现操作的（默认）实现
+// - 对于自定义（动态）数据类型（对象），输出：<mod_name.tp_name object at obj_addr>
+// - 对于 builtin（静态）数据类型（对象），输出：<tp_name object at obj_addr >
 static PyObject *
 object_repr(PyObject *self)
-{
+{   // @ PyBaseObject_Type.tp_repr
+
     PyTypeObject *type;
     PyObject *mod, *name, *rtn;
 
+    // 获取数据实例（对象）的 {构造数据类型（对象）}
+    // + {构造数据类型（对象）} 是 {数据类型（对象）object} 的派生类型
     type = Py_TYPE(self);
 
+    // 获取数据类型（对象）所属 module
+    // + 也就是在哪定义的
     mod = type_module(type, NULL);
     if (mod == NULL)
         PyErr_Clear();
-
     else if (!PyString_Check(mod)) {
         Py_DECREF(mod);
         mod = NULL;
     }
 
+    // 获取数据类型（对象）命名
     name = type_name(type, NULL);
     if (name == NULL)
         return NULL;
 
-    // 对于 builtin 数据类型
+    // 对于自定义（动态）数据类型（对象）
     if (mod != NULL && strcmp(PyString_AS_STRING(mod), "__builtin__"))
         rtn = PyString_FromFormat("<%s.%s object at %p>",
                                   PyString_AS_STRING(mod),
                                   PyString_AS_STRING(name),
                                   self);
+    // 对于 builtin（静态）数据类型（对象）
     else
         rtn = PyString_FromFormat("<%s object at %p>",
                                   type->tp_name, self);
@@ -3262,28 +3292,31 @@ object_repr(PyObject *self)
     return rtn;
 }
 
-// {数据类型（对象）object} 的实例（对象）的 str 描述接口的（默认）实现
+// 文字表示操作的（默认）实现
 static PyObject *
 object_str(PyObject *self)
-{
+{   // @ PyBaseObject_Type.tp_str
+
     unaryfunc f;
 
+    // 获取数据实例（对象）的 {构造数据类型（对象）} 的展示操作接口
     f = Py_TYPE(self)->tp_repr;
     if (f == NULL || f == object_str)
         f = object_repr;
 
+    // 默认使用展示操作输出的结果，作为文字表示
     return f(self);
 }
 
 // {数据类型（对象）object} 的 {成员属性} 定义
 //-----------------------------------------------------------------------------
 
-// {数据类型（对象）object} 的实例（对象）的获取 __class__ 属性的（默认）实现
+// 获取 __class__ 属性的（默认）实现
+// + 直接返回该数据实例（对象）的 {构造数据类型（对象）}
 static PyObject *
 object_get_class(PyObject *self, void *closure)
 {   // @ PyBaseObject_Type.tp_getset.__class__@object_getsets
 
-    // 直接返回该实例（对象）的数据类型（对象）
     Py_INCREF(Py_TYPE(self));
     return (PyObject *)(Py_TYPE(self));
 }
@@ -3291,7 +3324,8 @@ object_get_class(PyObject *self, void *closure)
 // 判断两个数据类型（对象）的实例（对象）的对象结构体定义是否一致
 static int
 equiv_structs(PyTypeObject *a, PyTypeObject *b)
-{
+{   // @ compatible_for_assignment
+
     return a == b ||
            (a != NULL && b != NULL &&
             a->tp_basicsize == b->tp_basicsize &&                   // 静态结构尺寸一致
@@ -3302,9 +3336,11 @@ equiv_structs(PyTypeObject *a, PyTypeObject *b)
              (b->tp_flags & Py_TPFLAGS_HAVE_GC)));
 }
 
+// 判断两个数据类型（对象）的实例（对象）的 。。 是否一致
 static int
 same_slots_added(PyTypeObject *a, PyTypeObject *b)
-{
+{   // @ compatible_for_assignment
+
     PyTypeObject *base = a->tp_base;
     Py_ssize_t size;
     PyObject *slots_a, *slots_b;
@@ -3374,7 +3410,8 @@ compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, char* attr)
     return 1;
 }
 
-// {数据类型（对象）object} 的实例（对象）的设置 __class__ 属性的（默认）实现
+// 设置 __class__ 属性的（默认）实现
+// ! 变更前后的数据类型（对象），必须是*动态*数据类型（对象）
 static int
 object_set_class(PyObject *self, PyObject *value, void *closure)
 {   // @ PyBaseObject_Type.tp_getset.__class__@object_getsets
@@ -3383,14 +3420,14 @@ object_set_class(PyObject *self, PyObject *value, void *closure)
     PyTypeObject *oldto = Py_TYPE(self);
     PyTypeObject *newto;
 
-    // 验证修改后的值不能为空
+    // 验证变更后的值不能为空
     if (value == NULL) {
         PyErr_SetString(PyExc_TypeError,
                         "can't delete __class__ attribute");
         return -1;
     }
 
-    // 验证修改后的值必须是个数据类型（对象）
+    // 验证变更后的值必须是个数据类型（对象）
     if (!PyType_Check(value)) {
         PyErr_Format(PyExc_TypeError,
           "__class__ must be set to new-style class, not '%s' object",
@@ -3424,6 +3461,7 @@ object_set_class(PyObject *self, PyObject *value, void *closure)
     }
 }
 
+// @ PyBaseObject_Type.tp_getsets
 static PyGetSetDef object_getsets[] = {
     {"__class__", object_get_class, object_set_class,
      PyDoc_STR("the object's class")},
@@ -3442,7 +3480,13 @@ static PyGetSetDef object_getsets[] = {
 
 static PyObject *
 import_copyreg(void)
-{
+{   // @ slotnames
+    //   @ reduce_2
+    //     @ _common_reduce
+    // @ reduce_2
+    //   @ _common_reduce
+    // @ _common_reduce
+
     static PyObject *copyreg_str;
 
     if (!copyreg_str) {
@@ -3456,7 +3500,9 @@ import_copyreg(void)
 
 static PyObject *
 slotnames(PyObject *cls)
-{
+{   // @ reduce_2
+    //   @ _common_reduce
+
     PyObject *clsdict;
     PyObject *copyreg;
     PyObject *slotnames;
@@ -3494,7 +3540,8 @@ slotnames(PyObject *cls)
 
 static PyObject *
 reduce_2(PyObject *obj)
-{
+{   // @ _common_reduce
+
     PyObject *cls, *getnewargs;
     PyObject *args = NULL, *args2 = NULL;
     PyObject *getstate = NULL, *state = NULL, *names = NULL;
@@ -3667,7 +3714,8 @@ _common_reduce(PyObject *self, int proto)
 // {数据类型（对象）object} 的实例（对象）的默认方法 __reduce__ 的实现
 static PyObject *
 object_reduce(PyObject *self, PyObject *args)
-{
+{   // @ PyBaseObject_Type.tp_methods.__reduce__
+
     int proto = 0;
 
     if (!PyArg_ParseTuple(args, "|i:__reduce__", &proto))
@@ -3679,7 +3727,8 @@ object_reduce(PyObject *self, PyObject *args)
 // {数据类型（对象）object} 的实例（对象）的默认方法 __reduce_ex__ 的实现
 static PyObject *
 object_reduce_ex(PyObject *self, PyObject *args)
-{
+{   // @ PyBaseObject_Type.tp_methods.__reduce_ex__
+
     PyObject *reduce, *res;
     int proto = 0;
 
@@ -3721,7 +3770,8 @@ object_reduce_ex(PyObject *self, PyObject *args)
 
 static PyObject *
 object_subclasshook(PyObject *cls, PyObject *args)
-{
+{   // @ PyBaseObject_Type.tp_methods.__subclasshook__
+
     Py_INCREF(Py_NotImplemented);
     return Py_NotImplemented;
 }
@@ -3747,7 +3797,8 @@ PyDoc_STRVAR(object_subclasshook_doc,
 // {数据类型（对象）object} 的实例（对象）的默认方法 __format__ 的实现
 static PyObject *
 object_format(PyObject *self, PyObject *args)
-{
+{   // @ PyBaseObject_Type.tp_methods.__format__
+
     PyObject *format_spec;
     PyObject *self_as_str = NULL;
     PyObject *result = NULL;
@@ -3798,7 +3849,8 @@ done:
 // {数据类型（对象）object} 的实例（对象）的默认方法 __sizeof__ 的实现
 static PyObject *
 object_sizeof(PyObject *self, PyObject *args)
-{
+{   // @ PyBaseObject_Type.tp_methods.__sizeof__
+
     Py_ssize_t res, isize;
 
     res = 0;
@@ -3810,6 +3862,7 @@ object_sizeof(PyObject *self, PyObject *args)
     return PyInt_FromSsize_t(res);
 }
 
+// @ PyBaseObject_Type.tp_methods
 static PyMethodDef object_methods[] = {
     {"__reduce_ex__", object_reduce_ex, METH_VARARGS,
      PyDoc_STR("helper for pickle")},
@@ -3876,7 +3929,8 @@ PyTypeObject PyBaseObject_Type = {
 
 static int
 add_methods(PyTypeObject *type, PyMethodDef *meth)
-{
+{   // @ PyType_Ready
+
     PyObject *dict = type->tp_dict;
 
     for (; meth->ml_name != NULL; meth++) {
@@ -3913,7 +3967,8 @@ add_methods(PyTypeObject *type, PyMethodDef *meth)
 
 static int
 add_members(PyTypeObject *type, PyMemberDef *memb)
-{
+{   // @ PyType_Ready
+
     PyObject *dict = type->tp_dict;
 
     for (; memb->name != NULL; memb++) {
@@ -3932,7 +3987,8 @@ add_members(PyTypeObject *type, PyMemberDef *memb)
 
 static int
 add_getset(PyTypeObject *type, PyGetSetDef *gsp)
-{
+{   // @ PyType_Ready
+
     PyObject *dict = type->tp_dict;
 
     for (; gsp->name != NULL; gsp++) {
@@ -3950,11 +4006,15 @@ add_getset(PyTypeObject *type, PyGetSetDef *gsp)
     return 0;
 }
 
+// 构建/维护数据类型（对象）的继承/派生关系
+//-----------------------------------------------------------------------------
+
 #define BUFFER_FLAGS (Py_TPFLAGS_HAVE_GETCHARBUFFER | Py_TPFLAGS_HAVE_NEWBUFFER)
 
 static void
 inherit_special(PyTypeObject *type, PyTypeObject *base)
-{
+{   // @ PyType_Ready
+
     Py_ssize_t oldsize, newsize;
 
     /* Special flag magic */
@@ -4066,16 +4126,16 @@ inherit_special(PyTypeObject *type, PyTypeObject *base)
 
 static int
 overrides_name(PyTypeObject *type, char *name)
-{
-    PyObject *dict = type->tp_dict;
+{   // @ inherit_slots
 
+    PyObject *dict = type->tp_dict;
     assert(dict != NULL);
+
     if (PyDict_GetItemString(dict, name) != NULL) {
         return 1;
     }
     return 0;
 }
-
 #define OVERRIDES_HASH(x)       overrides_name(x, "__hash__")
 #define OVERRIDES_EQ(x)         overrides_name(x, "__eq__")
 
@@ -4521,7 +4581,8 @@ add_subclass(PyTypeObject *base, PyTypeObject *type)
 // 从基类 `base` 的派生类管理集合（tp_subclasses）中，移除该数据类型（对象）`type`
 static void
 remove_subclass(PyTypeObject *base, PyTypeObject *type)
-{
+{   // @ type_set_bases
+
     Py_ssize_t i;
     PyObject *list, *ref;
 
@@ -4542,9 +4603,12 @@ remove_subclass(PyTypeObject *base, PyTypeObject *type)
     }
 }
 
-//-----------------------------------------------------------------------------
-// 数据类型（对象）的 builtin slots wrap 定义
-// + wrap 函数的目的，是实现 Python 语言对 C 函数的调用，其关键在于
+// 数据类型（对象）的 builtin slots（操作）的 wrap 定义
+// + wrap 函数的目的，是实现 Python 语言对 C 函数的调用
+//   这里的 builtin slots（操作）指的都是内置(静态)数据类型实现的操作
+//   它们的 wrapper 会被绑定作为数据类型（对象）的操作符，
+//   Python 语言可以通过这些数据类型（对象）的操作符来调用这些操作
+//   具体操作包括
 //   - 将 Python 语言调用的入参转换为 C 的入参
 //   - 并将 C 语言函数执行的返回值，转换为 Python 语言可读取的值
 //-----------------------------------------------------------------------------
@@ -5217,8 +5281,15 @@ add_tp_new_wrapper(PyTypeObject *type)
     return 0;
 }
 
-//-----------------------------------------------------------------------------
-// 数据类型（对象）的 builtin slots wrap 定义
+// 数据类型（对象）的 slots（操作）的通用触发处理
+// + 通用触发的目的，是实现 C 语言触发执行由 Python 环境定义的 slots（操作）
+//   这主要是针对自定义(动态)数据类型（对象）
+//   此时，数据类型（对象）的 slots（操作）是由类型的继承关系、以及 Python 语言环境的定义决定的
+//   因此，C 语言在使用这类数据类型（对象）时，就需要该机制，完成相应的 slots（操作）调用
+//   具体操作包括
+//   - 根据数据类型（对象）的继承路径，计算得出经过继承和重载后的（slots）操作符
+//   - 以调用 Python 函数的机制，触发该操作符
+//   - 将 Python 运行环境执行返回的结果，转换为 C 的返回值返回
 //-----------------------------------------------------------------------------
 
 /* Slot wrappers that call the corresponding __foo__ slot.  See comments
@@ -6189,8 +6260,7 @@ slot_tp_del(PyObject *self)
 #endif
 }
 
-//-----------------------------------------------------------------------------
-// 数据类型（对象）的 builtin slots 的定义、及其维护
+// 定义 {slots 定义描述表}
 //-----------------------------------------------------------------------------
 
 /* Table mapping __foo__ names to tp_foo offsets and slot_tp_foo wrapper
@@ -6207,7 +6277,7 @@ typedef struct wrapperbase slotdef;
 
 #undef TPSLOT   /* type slot */
 #undef FLSLOT   /* flags slot */
-#undef ETSLOT   /*  slot */
+#undef ETSLOT   /* extend slot */
 #undef SQSLOT   /* sequence slot */
 #undef MPSLOT   /* mapping slot */
 #undef NBSLOT   /* number slot */
@@ -6250,7 +6320,7 @@ typedef struct wrapperbase slotdef;
     ETSLOT(NAME, as_number.SLOT, FUNCTION, wrap_binaryfunc_r, \
            "x." NAME "(y) <==> " DOC)
 
-// 数据类型（对象）的 {默认 builtin slots 定义描述表}
+// 数据类型（对象）的 {slots 定义描述表}
 // + 这里定义的 slotdefs 的数据结构是一个数组
 //   而每一项的数据结构类型 slotdef 则是通过 typedef 对 struct wrapperbase 的重命名
 static slotdef slotdefs[] = {
@@ -6668,7 +6738,7 @@ slotdef_cmp(const void *aa, const void *bb)
 
 /* Initialize the slotdefs table by adding interned string objects for the
    names and sorting the entries. */
-// 初始化数据类型（对象）的 {默认 builtin slots 定义描述表}
+// 初始化 {slots 定义描述表}
 static void
 init_slotdefs(void)
 {   // @ add_operators
@@ -6697,7 +6767,7 @@ init_slotdefs(void)
 }
 
 /* Update the slots after assignment to a class (type) attribute. */
-// 当变更数据类型（对象）的（slot 操作符）属性后，同步更新该（属性对应的）slot 接口函数的实现
+// 当变更数据类型（对象）的（slot 操作符）属性后，同步更新该（属性对应的）slot 接口的实现
 static int
 update_slot(PyTypeObject *type, PyObject *name)
 {   // @ type_setattro
@@ -6715,7 +6785,7 @@ update_slot(PyTypeObject *type, PyObject *name)
        recursing into subclasses. */
     PyType_Modified(type);
 
-    // 确保 {默认 builtin slots 定义描述表} 初始化完成
+    // 确保 {slots 定义描述表} 初始化完成
     init_slotdefs();
 
     // 遍历获取和指定（属性）命名相同的 slot 定义项
@@ -6749,28 +6819,31 @@ update_slot(PyTypeObject *type, PyObject *name)
 /* Store the proper functions in the slot dispatches at class (type)
    definition time, based upon which operations the class overrides in its
    dict. */
+// 初始化自定义（动态）数据类型（对象）的（所有）slot 接口的实现
 static void
 fixup_slot_dispatchers(PyTypeObject *type)
 {   // @ type_new
 
     slotdef *p;
 
-    // 确保 {默认 builtin slots 定义描述表} 初始化完成
+    // 确保 {slots 定义描述表} 初始化完成
     init_slotdefs();
 
+    // 遍历 {slots 定义描述表}
     for (p = slotdefs; p->name; )
+
+        // 更新（初始化）该 slot 接口的实现
         p = update_one_slot(type, p);
 }
 
-// 同步更新该数据类型（对象）的所有 slots 接口函数的实现
-// + 触发该处理的场景是：变更了该数据类型（对象）的基类后
+// 当变更了该自定义（动态）数据类型（对象）的基类后，同步更新所有 slots 接口的实现
 static void
 update_all_slots(PyTypeObject* type)
 {   // @ type_set_bases
 
     slotdef *p;
 
-    // 确保 {默认 builtin slots 定义描述表} 初始化完成
+    // 确保 {slots 定义描述表} 初始化完成
     init_slotdefs();
 
     // 遍历所有 slots 的定义项
@@ -6872,7 +6945,7 @@ recurse_down_subclasses(PyTypeObject *type, PyObject *name,
    slot that calls the method from the dictionary, and we want to avoid
    infinite recursion here.) */
 
-// 给数据类型（对象），添加默认 builtin slots 操作符（接口）
+// 给数据类型（对象），添加 slots（接口）操作符
 static int
 add_operators(PyTypeObject *type)
 {   // @ PyType_Ready
@@ -6882,10 +6955,10 @@ add_operators(PyTypeObject *type)
     PyObject *descr;
     void **ptr;
 
-    // 确保 {默认 builtin slots 定义描述表} 初始化完成
+    // 确保 {slots 定义描述表} 初始化完成
     init_slotdefs();
 
-    // 遍历 {默认 builtin slots 定义描述表}
+    // 遍历 {slots 定义描述表}
     for (p = slotdefs; p->name; p++) {
 
         // 验证该 builtin slot 定义了 wrap 接口

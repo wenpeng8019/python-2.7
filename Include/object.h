@@ -301,7 +301,8 @@ typedef struct {
     releasebufferproc bf_releasebuffer;
 } PyBufferProcs;
 
-
+/* 数据类型（对象）的 slot（操作）接口原型定义
+ */
 typedef void (*freefunc)(void *);
 typedef void (*destructor)(PyObject *);
 typedef int (*printfunc)(PyObject *, FILE *, int);

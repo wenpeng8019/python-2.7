@@ -1,5 +1,6 @@
 
 /* Generic object operations; and implementation of None (NoObject) */
+// 所有数据对象的通用操作和处理、以及对 None 对象的定义
 
 #include "Python.h"
 #include "frameobject.h"
@@ -7,6 +8,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+///////////////////////////////////////////////////////////////////////////////
+// 针对所有数据对象的内部统计、跟踪和调试
+///////////////////////////////////////////////////////////////////////////////
 
 #ifdef Py_REF_DEBUG
 Py_ssize_t _Py_RefTotal;
@@ -202,23 +207,29 @@ _Py_NegativeRefcount(const char *fname, int lineno, PyObject *op)
 
 #endif /* Py_REF_DEBUG */
 
+///////////////////////////////////////////////////////////////////////////////
+
+// 增加数据对象的引用计数
 void
 Py_IncRef(PyObject *o)
 {
     Py_XINCREF(o);
 }
 
+// 减少数据对象的引用计数
 void
 Py_DecRef(PyObject *o)
 {
     Py_XDECREF(o);
 }
 
+// 初始化设置数据对象的数据类型（对象）
 PyObject *
 PyObject_Init(PyObject *op, PyTypeObject *tp)
 {
     if (op == NULL)
         return PyErr_NoMemory();
+
     /* Any changes should be reflected in PyObject_INIT (objimpl.h) */
     Py_TYPE(op) = tp;
     _Py_NewReference(op);
