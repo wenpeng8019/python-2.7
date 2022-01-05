@@ -5,7 +5,6 @@
 
 #include <ctype.h>
 
-
 /* Support type attribute cache */
 
 /* The cache can keep references to the names alive for longer than
@@ -33,114 +32,14 @@ struct method_cache_entry {
 static struct method_cache_entry method_cache[1 << MCACHE_SIZE_EXP];
 static unsigned int next_version_tag = 0;
 
-unsigned int
-PyType_ClearCache(void)
-{
-    Py_ssize_t i;
-    unsigned int cur_version_tag = next_version_tag - 1;
-
-    for (i = 0; i < (1 << MCACHE_SIZE_EXP); i++) {
-        method_cache[i].version = 0;
-        Py_CLEAR(method_cache[i].name);
-        method_cache[i].value = NULL;
-    }
-    next_version_tag = 0;
-    /* mark all version tags as invalid */
-    PyType_Modified(&PyBaseObject_Type);
-    return cur_version_tag;
-}
-
-void
-PyType_Modified(PyTypeObject *type)
-{
-    /* Invalidate any cached data for the specified type and all
-       subclasses.  This function is called after the base
-       classes, mro, or attributes of the type are altered.
-
-       Invariants:
-
-       - Py_TPFLAGS_VALID_VERSION_TAG is never set if
-         Py_TPFLAGS_HAVE_VERSION_TAG is not set (e.g. on type
-         objects coming from non-recompiled extension modules)
-
-       - before Py_TPFLAGS_VALID_VERSION_TAG can be set on a type,
-         it must first be set on all super types.
-
-       This function clears the Py_TPFLAGS_VALID_VERSION_TAG of a
-       type (so it must first clear it on all subclasses).  The
-       tp_version_tag value is meaningless unless this flag is set.
-       We don't assign new version tags eagerly, but only as
-       needed.
-     */
-    PyObject *raw, *ref;
-    Py_ssize_t i, n;
-
-    if (!PyType_HasFeature(type, Py_TPFLAGS_VALID_VERSION_TAG))
-        return;
-
-    raw = type->tp_subclasses;
-    if (raw != NULL) {
-        n = PyList_GET_SIZE(raw);
-        for (i = 0; i < n; i++) {
-            ref = PyList_GET_ITEM(raw, i);
-            ref = PyWeakref_GET_OBJECT(ref);
-            if (ref != Py_None) {
-                PyType_Modified((PyTypeObject *)ref);
-            }
-        }
-    }
-    type->tp_flags &= ~Py_TPFLAGS_VALID_VERSION_TAG;
-}
-
-static void
-type_mro_modified(PyTypeObject *type, PyObject *bases) {
-    /*
-       Check that all base classes or elements of the mro of type are
-       able to be cached.  This function is called after the base
-       classes or mro of the type are altered.
-
-       Unset HAVE_VERSION_TAG and VALID_VERSION_TAG if the type
-       inherits from an old-style class, either directly or if it
-       appears in the MRO of a new-style class.  No support either for
-       custom MROs that include types that are not officially super
-       types.
-
-       Called from mro_internal, which will subsequently be called on
-       each subclass when their mro is recursively updated.
-     */
-    Py_ssize_t i, n;
-    int clear = 0;
-
-    if (!PyType_HasFeature(type, Py_TPFLAGS_HAVE_VERSION_TAG))
-        return;
-
-    n = PyTuple_GET_SIZE(bases);
-    for (i = 0; i < n; i++) {
-        PyObject *b = PyTuple_GET_ITEM(bases, i);
-        PyTypeObject *cls;
-
-        if (!PyType_Check(b) ) {
-            clear = 1;
-            break;
-        }
-
-        cls = (PyTypeObject *)b;
-
-        if (!PyType_HasFeature(cls, Py_TPFLAGS_HAVE_VERSION_TAG) ||
-            !PyType_IsSubtype(type, cls)) {
-            clear = 1;
-            break;
-        }
-    }
-
-    if (clear)
-        type->tp_flags &= ~(Py_TPFLAGS_HAVE_VERSION_TAG|
-                            Py_TPFLAGS_VALID_VERSION_TAG);
-}
+///////////////////////////////////////////////////////////////////////////////
+// {数据类型（对象）type} 的定义
+///////////////////////////////////////////////////////////////////////////////
 
 static int
 assign_version_tag(PyTypeObject *type)
-{
+{   // @ _PyType_Lookup
+
     /* Ensure that the tp_version_tag is valid and set
        Py_TPFLAGS_VALID_VERSION_TAG.  To respect the invariant, this
        must first be done on all super classes.  Return 0 if this
@@ -189,19 +88,415 @@ assign_version_tag(PyTypeObject *type)
     return 1;
 }
 
+void
+PyType_Modified(PyTypeObject *type)
+{
+    /* Invalidate any cached data for the specified type and all
+       subclasses.  This function is called after the base
+       classes, mro, or attributes of the type are altered.
+
+       Invariants:
+
+       - Py_TPFLAGS_VALID_VERSION_TAG is never set if
+         Py_TPFLAGS_HAVE_VERSION_TAG is not set (e.g. on type
+         objects coming from non-recompiled extension modules)
+
+       - before Py_TPFLAGS_VALID_VERSION_TAG can be set on a type,
+         it must first be set on all super types.
+
+       This function clears the Py_TPFLAGS_VALID_VERSION_TAG of a
+       type (so it must first clear it on all subclasses).  The
+       tp_version_tag value is meaningless unless this flag is set.
+       We don't assign new version tags eagerly, but only as
+       needed.
+     */
+    PyObject *raw, *ref;
+    Py_ssize_t i, n;
+
+    if (!PyType_HasFeature(type, Py_TPFLAGS_VALID_VERSION_TAG))
+        return;
+
+    raw = type->tp_subclasses;
+    if (raw != NULL) {
+        n = PyList_GET_SIZE(raw);
+        for (i = 0; i < n; i++) {
+            ref = PyList_GET_ITEM(raw, i);
+            ref = PyWeakref_GET_OBJECT(ref);
+            if (ref != Py_None) {
+                PyType_Modified((PyTypeObject *)ref);
+            }
+        }
+    }
+    type->tp_flags &= ~Py_TPFLAGS_VALID_VERSION_TAG;
+}
+
+unsigned int
+PyType_ClearCache(void)
+{
+    Py_ssize_t i;
+    unsigned int cur_version_tag = next_version_tag - 1;
+
+    for (i = 0; i < (1 << MCACHE_SIZE_EXP); i++) {
+        method_cache[i].version = 0;
+        Py_CLEAR(method_cache[i].name);
+        method_cache[i].value = NULL;
+    }
+    next_version_tag = 0;
+    /* mark all version tags as invalid */
+    PyType_Modified(&PyBaseObject_Type);
+    return cur_version_tag;
+}
+
+/* Raise a TypeError for an MRO order disagreement.
+
+   It's hard to produce a good error message.  In the absence of better
+   insight into error reporting, report the classes that were candidates
+   to be put next into the MRO.  There is some conflict between the
+   order in which they should be put in the MRO, but it's hard to
+   diagnose what constraint can't be satisfied.
+*/
+
+static void
+set_mro_error(PyObject *to_merge, int *remain)
+{   // @ pmerge
+
+    Py_ssize_t i, n, off, to_merge_size;
+    char buf[1000];
+    PyObject *k, *v;
+    PyObject *set = PyDict_New();
+    if (!set) return;
+
+    to_merge_size = PyList_GET_SIZE(to_merge);
+    for (i = 0; i < to_merge_size; i++) {
+        PyObject *L = PyList_GET_ITEM(to_merge, i);
+        if (remain[i] < PyList_GET_SIZE(L)) {
+            PyObject *c = PyList_GET_ITEM(L, remain[i]);
+            if (PyDict_SetItem(set, c, Py_None) < 0) {
+                Py_DECREF(set);
+                return;
+            }
+        }
+    }
+    n = PyDict_Size(set);
+
+    off = PyOS_snprintf(buf, sizeof(buf), "Cannot create a \
+consistent method resolution\norder (MRO) for bases");
+    i = 0;
+    while (PyDict_Next(set, &i, &k, &v) && (size_t)off < sizeof(buf)) {
+        PyObject *name = class_name(k);
+        off += PyOS_snprintf(buf + off, sizeof(buf) - off, " %s",
+                             name ? PyString_AS_STRING(name) : "?");
+        Py_XDECREF(name);
+        if (--n && (size_t)(off+1) < sizeof(buf)) {
+            buf[off++] = ',';
+            buf[off] = '\0';
+        }
+    }
+    PyErr_SetString(PyExc_TypeError, buf);
+    Py_DECREF(set);
+}
+
+static int
+pmerge(PyObject *acc, PyObject* to_merge) 
+{   // @ mro_implementation
+
+    Py_ssize_t i, j, to_merge_size, empty_cnt;
+    int *remain;
+    int ok;
+
+    to_merge_size = PyList_GET_SIZE(to_merge);
+
+    /* remain stores an index into each sublist of to_merge.
+       remain[i] is the index of the next base in to_merge[i]
+       that is not included in acc.
+    */
+    remain = (int *)PyMem_MALLOC(SIZEOF_INT*to_merge_size);
+    if (remain == NULL)
+        return -1;
+    for (i = 0; i < to_merge_size; i++)
+        remain[i] = 0;
+
+  again:
+    empty_cnt = 0;
+    for (i = 0; i < to_merge_size; i++) {
+        PyObject *candidate;
+
+        PyObject *cur_list = PyList_GET_ITEM(to_merge, i);
+
+        if (remain[i] >= PyList_GET_SIZE(cur_list)) {
+            empty_cnt++;
+            continue;
+        }
+
+        /* Choose next candidate for MRO.
+
+           The input sequences alone can determine the choice.
+           If not, choose the class which appears in the MRO
+           of the earliest direct superclass of the new class.
+        */
+
+        candidate = PyList_GET_ITEM(cur_list, remain[i]);
+        for (j = 0; j < to_merge_size; j++) {
+            PyObject *j_lst = PyList_GET_ITEM(to_merge, j);
+            if (tail_contains(j_lst, remain[j], candidate)) {
+                goto skip; /* continue outer loop */
+            }
+        }
+        ok = PyList_Append(acc, candidate);
+        if (ok < 0) {
+            PyMem_Free(remain);
+            return -1;
+        }
+        for (j = 0; j < to_merge_size; j++) {
+            PyObject *j_lst = PyList_GET_ITEM(to_merge, j);
+            if (remain[j] < PyList_GET_SIZE(j_lst) &&
+                PyList_GET_ITEM(j_lst, remain[j]) == candidate) {
+                remain[j]++;
+            }
+        }
+        goto again;
+      skip: ;
+    }
+
+    if (empty_cnt == to_merge_size) {
+        PyMem_FREE(remain);
+        return 0;
+    }
+    set_mro_error(to_merge, remain);
+    PyMem_FREE(remain);
+    return -1;
+}
+
+static PyObject *
+mro_implementation(PyTypeObject *type)
+{   // @ mro_internal
+    // @ mro_external
+
+    Py_ssize_t i, n;
+    int ok;
+    PyObject *bases, *result;
+    PyObject *to_merge, *bases_aslist;
+
+    // 确保完成 ready 处理
+    if (type->tp_dict == NULL) {
+        if (PyType_Ready(type) < 0)
+            return NULL;
+    }
+
+    /* Find a superclass linearization that honors the constraints
+       of the explicit lists of bases and the constraints implied by
+       each base class.
+
+       to_merge is a list of lists, where each list is a superclass
+       linearization implied by a base class.  The last element of
+       to_merge is the declared list of bases.
+    */
+
+    bases = type->tp_bases;
+    n = PyTuple_GET_SIZE(bases);
+
+    to_merge = PyList_New(n+1);
+    if (to_merge == NULL)
+        return NULL;
+
+    // 遍历继承路径中的基类
+    for (i = 0; i < n; i++) {
+        PyObject *base = PyTuple_GET_ITEM(bases, i);
+
+        PyObject *parentMRO;
+
+        // 如果 base 是 {数据类型（对象）type} 或其派生类型
+        // + 也就是 metatype 类厂
+        if (PyType_Check(base))
+            parentMRO = PySequence_List(((PyTypeObject*)base)->tp_mro);
+        // 如果 base 是 {数据类型（对象）class} 的实例（对象）
+        // + 也就是自定义类（对象）
+        else
+            parentMRO = classic_mro(base);
+            
+        if (parentMRO == NULL) {
+            Py_DECREF(to_merge);
+            return NULL;
+        }
+
+        PyList_SET_ITEM(to_merge, i, parentMRO);
+    }
+
+    bases_aslist = PySequence_List(bases);
+    if (bases_aslist == NULL) {
+        Py_DECREF(to_merge);
+        return NULL;
+    }
+    /* This is just a basic sanity check. */
+    if (check_duplicates(bases_aslist) < 0) {
+        Py_DECREF(to_merge);
+        Py_DECREF(bases_aslist);
+        return NULL;
+    }
+    PyList_SET_ITEM(to_merge, n, bases_aslist);
+
+    result = Py_BuildValue("[O]", (PyObject *)type);
+    if (result == NULL) {
+        Py_DECREF(to_merge);
+        return NULL;
+    }
+
+    ok = pmerge(result, to_merge);
+    Py_DECREF(to_merge);
+    if (ok < 0) {
+        Py_DECREF(result);
+        return NULL;
+    }
+
+    return result;
+}
+
+static PyObject *
+mro_external(PyObject *self)
+{   // @ type_methods['mro']
+
+    PyTypeObject *type = (PyTypeObject *)self;
+
+    return mro_implementation(type);
+}
+
+static void
+type_mro_modified(PyTypeObject *type, PyObject *bases) 
+{   // @ mro_internal
+
+    /*
+       Check that all base classes or elements of the mro of type are
+       able to be cached.  This function is called after the base
+       classes or mro of the type are altered.
+
+       Unset HAVE_VERSION_TAG and VALID_VERSION_TAG if the type
+       inherits from an old-style class, either directly or if it
+       appears in the MRO of a new-style class.  No support either for
+       custom MROs that include types that are not officially super
+       types.
+
+       Called from mro_internal, which will subsequently be called on
+       each subclass when their mro is recursively updated.
+     */
+    Py_ssize_t i, n;
+    int clear = 0;
+
+    if (!PyType_HasFeature(type, Py_TPFLAGS_HAVE_VERSION_TAG))
+        return;
+
+    n = PyTuple_GET_SIZE(bases);
+    for (i = 0; i < n; i++) {
+        PyObject *b = PyTuple_GET_ITEM(bases, i);
+        PyTypeObject *cls;
+
+        if (!PyType_Check(b) ) {
+            clear = 1;
+            break;
+        }
+
+        cls = (PyTypeObject *)b;
+
+        if (!PyType_HasFeature(cls, Py_TPFLAGS_HAVE_VERSION_TAG) ||
+            !PyType_IsSubtype(type, cls)) {
+            clear = 1;
+            break;
+        }
+    }
+
+    if (clear)
+        type->tp_flags &= ~(Py_TPFLAGS_HAVE_VERSION_TAG|
+                            Py_TPFLAGS_VALID_VERSION_TAG);
+}
+
+static int
+mro_internal(PyTypeObject *type)
+{   // @ PyType_Ready
+    // @ type_set_bases
+
+    PyObject *mro, *result, *tuple;
+    int checkit = 0;
+
+    if (Py_TYPE(type) == &PyType_Type) {
+
+        result = mro_implementation(type);
+    }
+    else {
+        static PyObject *mro_str;
+        checkit = 1;
+
+        mro = lookup_method((PyObject *)type, "mro", &mro_str);
+        if (mro == NULL)
+            return -1;
+
+        result = PyObject_CallObject(mro, NULL);
+        Py_DECREF(mro);
+    }
+    if (result == NULL)
+        return -1;
+
+    tuple = PySequence_Tuple(result);
+    Py_DECREF(result);
+    if (tuple == NULL)
+        return -1;
+    if (checkit) {
+        Py_ssize_t i, len;
+        PyObject *cls;
+        PyTypeObject *solid;
+
+        solid = solid_base(type);
+
+        len = PyTuple_GET_SIZE(tuple);
+
+        for (i = 0; i < len; i++) {
+            PyTypeObject *t;
+            cls = PyTuple_GET_ITEM(tuple, i);
+            if (PyClass_Check(cls))
+                continue;
+            else if (!PyType_Check(cls)) {
+                PyErr_Format(PyExc_TypeError,
+                 "mro() returned a non-class ('%.500s')",
+                                 Py_TYPE(cls)->tp_name);
+                Py_DECREF(tuple);
+                return -1;
+            }
+            t = (PyTypeObject*)cls;
+            if (!PyType_IsSubtype(solid, solid_base(t))) {
+                PyErr_Format(PyExc_TypeError,
+             "mro() returned base with unsuitable layout ('%.500s')",
+                                     t->tp_name);
+                        Py_DECREF(tuple);
+                        return -1;
+            }
+        }
+    }
+    type->tp_mro = tuple;
+
+    type_mro_modified(type, type->tp_mro);
+    /* corner case: the old-style super class might have been hidden
+       from the custom MRO */
+    type_mro_modified(type, type->tp_bases);
+
+    PyType_Modified(type);
+
+    return 0;
+}
+
+// {数据类型（对象）type} 的 {成员对象} 定义
+//-----------------------------------------------------------------------------
 
 static PyMemberDef type_members[] = {
     {"__basicsize__", T_PYSSIZET, offsetof(PyTypeObject,tp_basicsize),READONLY},
     {"__itemsize__", T_PYSSIZET, offsetof(PyTypeObject, tp_itemsize), READONLY},
     {"__flags__", T_LONG, offsetof(PyTypeObject, tp_flags), READONLY},
-    {"__weakrefoffset__", T_LONG,
-     offsetof(PyTypeObject, tp_weaklistoffset), READONLY},
+    {"__weakrefoffset__", T_LONG, offsetof(PyTypeObject, tp_weaklistoffset), READONLY},
     {"__base__", T_OBJECT, offsetof(PyTypeObject, tp_base), READONLY},
-    {"__dictoffset__", T_LONG,
-     offsetof(PyTypeObject, tp_dictoffset), READONLY},
+    {"__dictoffset__", T_LONG, offsetof(PyTypeObject, tp_dictoffset), READONLY},
     {"__mro__", T_OBJECT, offsetof(PyTypeObject, tp_mro), READONLY},
     {0}
 };
+
+// {数据类型（对象）type} 的 {成员属性} 定义
+//-----------------------------------------------------------------------------
 
 static PyObject *
 type_name(PyTypeObject *type, void *context)
@@ -605,6 +900,19 @@ type_get_doc(PyTypeObject *type, void *context)
     return result;
 }
 
+static PyGetSetDef type_getsets[] = {
+    {"__name__", (getter)type_name, (setter)type_set_name, NULL},
+    {"__bases__", (getter)type_get_bases, (setter)type_set_bases, NULL},
+    {"__module__", (getter)type_module, (setter)type_set_module, NULL},
+    {"__abstractmethods__", (getter)type_abstractmethods, (setter)type_set_abstractmethods, NULL},
+    {"__dict__",  (getter)type_dict,  NULL, NULL},
+    {"__doc__", (getter)type_get_doc, NULL, NULL},
+    {0}
+};
+
+// {数据类型（对象）object} 的 {成员函数} 定义
+//-----------------------------------------------------------------------------
+
 static PyObject *
 type___instancecheck__(PyObject *type, PyObject *inst)
 {
@@ -632,18 +940,48 @@ type___subclasscheck__(PyObject *type, PyObject *inst)
     }
 }
 
+static PyObject *
+type_subclasses(PyTypeObject *type, PyObject *args_ignored)
+{
+    PyObject *list, *raw, *ref;
+    Py_ssize_t i, n;
 
-static PyGetSetDef type_getsets[] = {
-    {"__name__", (getter)type_name, (setter)type_set_name, NULL},
-    {"__bases__", (getter)type_get_bases, (setter)type_set_bases, NULL},
-    {"__module__", (getter)type_module, (setter)type_set_module, NULL},
-    {"__abstractmethods__", (getter)type_abstractmethods,
-     (setter)type_set_abstractmethods, NULL},
-    {"__dict__",  (getter)type_dict,  NULL, NULL},
-    {"__doc__", (getter)type_get_doc, NULL, NULL},
+    list = PyList_New(0);
+    if (list == NULL)
+        return NULL;
+    raw = type->tp_subclasses;
+    if (raw == NULL)
+        return list;
+    assert(PyList_Check(raw));
+    n = PyList_GET_SIZE(raw);
+    for (i = 0; i < n; i++) {
+        ref = PyList_GET_ITEM(raw, i);
+        assert(PyWeakref_CheckRef(ref));
+        ref = PyWeakref_GET_OBJECT(ref);
+        if (ref != Py_None) {
+            if (PyList_Append(list, ref) < 0) {
+                Py_DECREF(list);
+                return NULL;
+            }
+        }
+    }
+    return list;
+}
+
+static PyMethodDef type_methods[] = {
+    {"mro", (PyCFunction)mro_external, METH_NOARGS,
+     PyDoc_STR("mro() -> list\nreturn a type's method resolution order")},
+    {"__subclasses__", (PyCFunction)type_subclasses, METH_NOARGS,
+     PyDoc_STR("__subclasses__() -> list of immediate subclasses")},
+    {"__instancecheck__", type___instancecheck__, METH_O,
+     PyDoc_STR("__instancecheck__() -> bool\ncheck if an object is an instance")},
+    {"__subclasscheck__", type___subclasscheck__, METH_O,
+     PyDoc_STR("__subclasscheck__() -> bool\ncheck if a class is a subclass")},
     {0}
 };
 
+// {数据类型（对象）object} 的 {成员操作} 定义
+//-----------------------------------------------------------------------------
 
 static PyObject*
 type_richcompare(PyObject *v, PyObject *w, int op)
@@ -1474,288 +1812,6 @@ check_duplicates(PyObject *list)
     return 0;
 }
 
-/* Raise a TypeError for an MRO order disagreement.
-
-   It's hard to produce a good error message.  In the absence of better
-   insight into error reporting, report the classes that were candidates
-   to be put next into the MRO.  There is some conflict between the
-   order in which they should be put in the MRO, but it's hard to
-   diagnose what constraint can't be satisfied.
-*/
-
-static void
-set_mro_error(PyObject *to_merge, int *remain)
-{
-    Py_ssize_t i, n, off, to_merge_size;
-    char buf[1000];
-    PyObject *k, *v;
-    PyObject *set = PyDict_New();
-    if (!set) return;
-
-    to_merge_size = PyList_GET_SIZE(to_merge);
-    for (i = 0; i < to_merge_size; i++) {
-        PyObject *L = PyList_GET_ITEM(to_merge, i);
-        if (remain[i] < PyList_GET_SIZE(L)) {
-            PyObject *c = PyList_GET_ITEM(L, remain[i]);
-            if (PyDict_SetItem(set, c, Py_None) < 0) {
-                Py_DECREF(set);
-                return;
-            }
-        }
-    }
-    n = PyDict_Size(set);
-
-    off = PyOS_snprintf(buf, sizeof(buf), "Cannot create a \
-consistent method resolution\norder (MRO) for bases");
-    i = 0;
-    while (PyDict_Next(set, &i, &k, &v) && (size_t)off < sizeof(buf)) {
-        PyObject *name = class_name(k);
-        off += PyOS_snprintf(buf + off, sizeof(buf) - off, " %s",
-                             name ? PyString_AS_STRING(name) : "?");
-        Py_XDECREF(name);
-        if (--n && (size_t)(off+1) < sizeof(buf)) {
-            buf[off++] = ',';
-            buf[off] = '\0';
-        }
-    }
-    PyErr_SetString(PyExc_TypeError, buf);
-    Py_DECREF(set);
-}
-
-static int
-pmerge(PyObject *acc, PyObject* to_merge) {
-    Py_ssize_t i, j, to_merge_size, empty_cnt;
-    int *remain;
-    int ok;
-
-    to_merge_size = PyList_GET_SIZE(to_merge);
-
-    /* remain stores an index into each sublist of to_merge.
-       remain[i] is the index of the next base in to_merge[i]
-       that is not included in acc.
-    */
-    remain = (int *)PyMem_MALLOC(SIZEOF_INT*to_merge_size);
-    if (remain == NULL)
-        return -1;
-    for (i = 0; i < to_merge_size; i++)
-        remain[i] = 0;
-
-  again:
-    empty_cnt = 0;
-    for (i = 0; i < to_merge_size; i++) {
-        PyObject *candidate;
-
-        PyObject *cur_list = PyList_GET_ITEM(to_merge, i);
-
-        if (remain[i] >= PyList_GET_SIZE(cur_list)) {
-            empty_cnt++;
-            continue;
-        }
-
-        /* Choose next candidate for MRO.
-
-           The input sequences alone can determine the choice.
-           If not, choose the class which appears in the MRO
-           of the earliest direct superclass of the new class.
-        */
-
-        candidate = PyList_GET_ITEM(cur_list, remain[i]);
-        for (j = 0; j < to_merge_size; j++) {
-            PyObject *j_lst = PyList_GET_ITEM(to_merge, j);
-            if (tail_contains(j_lst, remain[j], candidate)) {
-                goto skip; /* continue outer loop */
-            }
-        }
-        ok = PyList_Append(acc, candidate);
-        if (ok < 0) {
-            PyMem_Free(remain);
-            return -1;
-        }
-        for (j = 0; j < to_merge_size; j++) {
-            PyObject *j_lst = PyList_GET_ITEM(to_merge, j);
-            if (remain[j] < PyList_GET_SIZE(j_lst) &&
-                PyList_GET_ITEM(j_lst, remain[j]) == candidate) {
-                remain[j]++;
-            }
-        }
-        goto again;
-      skip: ;
-    }
-
-    if (empty_cnt == to_merge_size) {
-        PyMem_FREE(remain);
-        return 0;
-    }
-    set_mro_error(to_merge, remain);
-    PyMem_FREE(remain);
-    return -1;
-}
-
-static PyObject *
-mro_implementation(PyTypeObject *type)
-{   // @ mro_internal
-    // @ mro_external
-
-    Py_ssize_t i, n;
-    int ok;
-    PyObject *bases, *result;
-    PyObject *to_merge, *bases_aslist;
-
-    // 确保完成 ready 处理
-    if (type->tp_dict == NULL) {
-        if (PyType_Ready(type) < 0)
-            return NULL;
-    }
-
-    /* Find a superclass linearization that honors the constraints
-       of the explicit lists of bases and the constraints implied by
-       each base class.
-
-       to_merge is a list of lists, where each list is a superclass
-       linearization implied by a base class.  The last element of
-       to_merge is the declared list of bases.
-    */
-
-    bases = type->tp_bases;
-    n = PyTuple_GET_SIZE(bases);
-
-    to_merge = PyList_New(n+1);
-    if (to_merge == NULL)
-        return NULL;
-
-    // 遍历继承路径中的基类
-    for (i = 0; i < n; i++) {
-        PyObject *base = PyTuple_GET_ITEM(bases, i);
-
-        PyObject *parentMRO;
-
-        // 如果 base 是 {数据类型（对象）type} 或其派生类型
-        // + 也就是 metatype 类厂
-        if (PyType_Check(base))
-            parentMRO = PySequence_List(((PyTypeObject*)base)->tp_mro);
-        // 如果 base 是 {数据类型（对象）class} 的实例（对象）
-        // + 也就是自定义类（对象）
-        else
-            parentMRO = classic_mro(base);
-            
-        if (parentMRO == NULL) {
-            Py_DECREF(to_merge);
-            return NULL;
-        }
-
-        PyList_SET_ITEM(to_merge, i, parentMRO);
-    }
-
-    bases_aslist = PySequence_List(bases);
-    if (bases_aslist == NULL) {
-        Py_DECREF(to_merge);
-        return NULL;
-    }
-    /* This is just a basic sanity check. */
-    if (check_duplicates(bases_aslist) < 0) {
-        Py_DECREF(to_merge);
-        Py_DECREF(bases_aslist);
-        return NULL;
-    }
-    PyList_SET_ITEM(to_merge, n, bases_aslist);
-
-    result = Py_BuildValue("[O]", (PyObject *)type);
-    if (result == NULL) {
-        Py_DECREF(to_merge);
-        return NULL;
-    }
-
-    ok = pmerge(result, to_merge);
-    Py_DECREF(to_merge);
-    if (ok < 0) {
-        Py_DECREF(result);
-        return NULL;
-    }
-
-    return result;
-}
-
-static PyObject *
-mro_external(PyObject *self)
-{   // @ type_methods['mro']
-
-    PyTypeObject *type = (PyTypeObject *)self;
-
-    return mro_implementation(type);
-}
-
-static int
-mro_internal(PyTypeObject *type)
-{   // @ PyType_Ready
-    // @ type_set_bases
-
-    PyObject *mro, *result, *tuple;
-    int checkit = 0;
-
-    if (Py_TYPE(type) == &PyType_Type) {
-
-        result = mro_implementation(type);
-    }
-    else {
-        static PyObject *mro_str;
-        checkit = 1;
-
-        mro = lookup_method((PyObject *)type, "mro", &mro_str);
-        if (mro == NULL)
-            return -1;
-
-        result = PyObject_CallObject(mro, NULL);
-        Py_DECREF(mro);
-    }
-    if (result == NULL)
-        return -1;
-
-    tuple = PySequence_Tuple(result);
-    Py_DECREF(result);
-    if (tuple == NULL)
-        return -1;
-    if (checkit) {
-        Py_ssize_t i, len;
-        PyObject *cls;
-        PyTypeObject *solid;
-
-        solid = solid_base(type);
-
-        len = PyTuple_GET_SIZE(tuple);
-
-        for (i = 0; i < len; i++) {
-            PyTypeObject *t;
-            cls = PyTuple_GET_ITEM(tuple, i);
-            if (PyClass_Check(cls))
-                continue;
-            else if (!PyType_Check(cls)) {
-                PyErr_Format(PyExc_TypeError,
-                 "mro() returned a non-class ('%.500s')",
-                                 Py_TYPE(cls)->tp_name);
-                Py_DECREF(tuple);
-                return -1;
-            }
-            t = (PyTypeObject*)cls;
-            if (!PyType_IsSubtype(solid, solid_base(t))) {
-                PyErr_Format(PyExc_TypeError,
-             "mro() returned base with unsuitable layout ('%.500s')",
-                                     t->tp_name);
-                        Py_DECREF(tuple);
-                        return -1;
-            }
-        }
-    }
-    type->tp_mro = tuple;
-
-    type_mro_modified(type, type->tp_mro);
-    /* corner case: the old-style super class might have been hidden
-       from the custom MRO */
-    type_mro_modified(type, type->tp_bases);
-
-    PyType_Modified(type);
-
-    return 0;
-}
 
 
 /* Calculate the best base amongst multiple base classes.
@@ -2825,46 +2881,6 @@ type_dealloc(PyTypeObject *type)
     Py_TYPE(type)->tp_free((PyObject *)type);
 }
 
-static PyObject *
-type_subclasses(PyTypeObject *type, PyObject *args_ignored)
-{
-    PyObject *list, *raw, *ref;
-    Py_ssize_t i, n;
-
-    list = PyList_New(0);
-    if (list == NULL)
-        return NULL;
-    raw = type->tp_subclasses;
-    if (raw == NULL)
-        return list;
-    assert(PyList_Check(raw));
-    n = PyList_GET_SIZE(raw);
-    for (i = 0; i < n; i++) {
-        ref = PyList_GET_ITEM(raw, i);
-        assert(PyWeakref_CheckRef(ref));
-        ref = PyWeakref_GET_OBJECT(ref);
-        if (ref != Py_None) {
-            if (PyList_Append(list, ref) < 0) {
-                Py_DECREF(list);
-                return NULL;
-            }
-        }
-    }
-    return list;
-}
-
-static PyMethodDef type_methods[] = {
-    {"mro", (PyCFunction)mro_external, METH_NOARGS,
-     PyDoc_STR("mro() -> list\nreturn a type's method resolution order")},
-    {"__subclasses__", (PyCFunction)type_subclasses, METH_NOARGS,
-     PyDoc_STR("__subclasses__() -> list of immediate subclasses")},
-    {"__instancecheck__", type___instancecheck__, METH_O,
-     PyDoc_STR("__instancecheck__() -> bool\ncheck if an object is an instance")},
-    {"__subclasscheck__", type___subclasscheck__, METH_O,
-     PyDoc_STR("__subclasscheck__() -> bool\ncheck if a class is a subclass")},
-    {0}
-};
-
 PyDoc_STRVAR(type_doc,
 "type(object) -> the object's type\n"
 "type(name, bases, dict) -> a new type");
@@ -2937,8 +2953,7 @@ type_is_gc(PyTypeObject *type)
     return type->tp_flags & Py_TPFLAGS_HEAPTYPE;
 }
 
-/******************************************************************************
- * {数据类型（对象）type} 的结构体定义
+/* {数据类型（对象）type} 的结构体定义
  * {数据类型（对象）type} 是个特殊的数据类型（对象）
  * - 首先，它是个数据类型（对象），这和普通的 bool、int、float、str、... 数据类型（对象）一样。
  * - 此外，{数据类型（对象）type} 是数据类型（对象）的数据类型。
@@ -2964,7 +2979,7 @@ type_is_gc(PyTypeObject *type)
  * - PyBaseObject_Type 承载的则是所有数据类型（对象）的实例（对象）的共同特性
  * - 此外，PyBaseObject_Type 也承担了所有数据类型（对象）的部分共同特性，因为 PyBaseObject_Type 同时也是 PyType_Type 的基类
  *   不过，很多特性会被 PyType_Type 重载。
- ******************************************************************************/
+ */
 
 PyTypeObject PyType_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
@@ -3020,6 +3035,16 @@ PyTypeObject PyType_Type = {
 
 /* The base type of all types (eventually)... except itself. */
 
+/* {数据类型（对象）object} 是，除了它自身以外的，所有数据类型（对象）的最终基类
+ * + 由于 {数据类型（对象）object} 是所有数据类型（对象）的基类，
+ *   而数据类型（对象）定义的接口，又会作为其实例（对象）的类函数定义
+ *   因此，{数据类型（对象）object} 实现的接口，相当于所有实例（对象）的默认功能实现
+ */
+
+
+// {数据类型（对象）object} 的 {成员操作} 定义
+//-----------------------------------------------------------------------------
+
 /* You may wonder why object.__new__() only complains about arguments
    when object.__init__() is not overridden, and vice versa.
 
@@ -3058,12 +3083,6 @@ PyTypeObject PyType_Type = {
    methods are overridden; for all other cases we'll use the above
    rules.
 */
-
-/* {数据类型（对象）object} 是，除了它自身以外的，所有数据类型（对象）的最终基类
- * + 由于 {数据类型（对象）object} 是所有数据类型（对象）的基类，
- *   而数据类型（对象）定义的接口，又会作为其实例（对象）的类函数定义
- *   因此，{数据类型（对象）object} 实现的接口，相当于所有实例（对象）的默认功能实现
- */
 
 /* Forward */
 static PyObject *
@@ -3404,7 +3423,6 @@ object_set_class(PyObject *self, PyObject *value, void *closure)
         return -1;
     }
 }
-
 
 static PyGetSetDef object_getsets[] = {
     {"__class__", object_get_class, object_set_class,
