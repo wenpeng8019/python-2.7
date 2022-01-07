@@ -649,7 +649,7 @@ PyInstance_New(PyObject *klass, PyObject *arg, PyObject *kw)
     if (inst == NULL)
         return NULL;
     
-    // 获取自定义构造函数
+    // 执行初始化构造函数
     init = instance_getattr2(inst, initstr);
     if (init == NULL) {
         if (PyErr_Occurred()) {
@@ -701,10 +701,8 @@ Create an instance without calling its __init__() method.\n\
 The class must be a classic class.\n\
 If present, dict must be a dictionary or None.");
 
-// 新建一个 class 类（对象）的实例（对象）
-// + 关于参数
-//   - `type`
-//     + 数据类型(对象) `instance` 或其派生类型
+// 新建一个 {数据类型（对象）instance} 的实例（对象）
+// ! 该接口创建的类实例（对象）并不会执行初始化构造函数
 static PyObject *
 instance_new(PyTypeObject* type, PyObject* args, PyObject *kw)
 {   // @ PyInstance_Type.tp_new
@@ -713,9 +711,9 @@ instance_new(PyTypeObject* type, PyObject* args, PyObject *kw)
     PyObject *dict = Py_None;
 
     // 解析参数：
-    // - PyClass_Type 用于指定 klass 的数据类型（即 `class` 类型）
-    // - klass 为 class 类（对象），它是数据类型 `class` 的一个实例（对象）
-    // - 要新建的 class 类（对象）的实例（对象）的数据 dict
+    // - PyClass_Type 用于指定 klass 的数据类型
+    // - klass 为 class 类（对象），它是 {数据类型（对象）class} 的一个实例（对象）
+    // - 数据 dict 是要新建的 class 类实例（对象）的数据
     if (!PyArg_ParseTuple(args, "O!|O:instance",
                           &PyClass_Type, &klass, &dict))
         return NULL;
@@ -817,23 +815,34 @@ instance_getattr1(register PyInstanceObject *inst, PyObject *name)
 
     register PyObject *v;
     register char *sname = PyString_AsString(name);
+
+    // 对于以 ‘__’ 开头的属性命名
+    // + 被视为内置默认操作符
     if (sname[0] == '_' && sname[1] == '_') {
+
         if (strcmp(sname, "__dict__") == 0) {
+
             if (PyEval_GetRestricted()) {
                 PyErr_SetString(PyExc_RuntimeError,
             "instance.__dict__ not accessible in restricted mode");
                 return NULL;
             }
+
             Py_INCREF(inst->in_dict);
             return inst->in_dict;
         }
+
         if (strcmp(sname, "__class__") == 0) {
+
             Py_INCREF(inst->in_class);
             return (PyObject *)inst->in_class;
         }
     }
+
+    // 对于其他属性
     v = instance_getattr2(inst, name);
     if (v == NULL && !PyErr_Occurred()) {
+
         PyErr_Format(PyExc_AttributeError,
                      "%.50s instance has no attribute '%.400s'",
                      PyString_AS_STRING(inst->in_class->cl_name), sname);
@@ -843,23 +852,34 @@ instance_getattr1(register PyInstanceObject *inst, PyObject *name)
 
 static PyObject *
 instance_getattr2(register PyInstanceObject *inst, PyObject *name)
-{
+{   // @ instance_getattr1
+    // @ PyInstance_New
+    // @ instance_dealloc
+    // @ half_richcompare
+    //   @ instance_richcompare
+
     register PyObject *v;
     PyClassObject *klass;
     descrgetfunc f;
 
+    // 如果在类实例（对象）自身的数据 dict 中存在该属性，则直接返回
     v = PyDict_GetItem(inst->in_dict, name);
     if (v != NULL) {
         Py_INCREF(v);
         return v;
     }
+
+    // 获取由 class 类（对象）定义的相关 项
     v = class_lookup(inst->in_class, name, &klass);
     if (v != NULL) {
         Py_INCREF(v);
+
         f = TP_DESCR_GET(v->ob_type);
         if (f != NULL) {
+
             PyObject *w = f(v, (PyObject *)inst,
                             (PyObject *)(inst->in_class));
+
             Py_DECREF(v);
             v = w;
         }
@@ -869,17 +889,24 @@ instance_getattr2(register PyInstanceObject *inst, PyObject *name)
 
 static PyObject *
 instance_getattr(register PyInstanceObject *inst, PyObject *name)
-{
+{   // @ PyInstance_Type.tp_getattro
+    // @ ...
+
     register PyObject *func, *res;
+
     res = instance_getattr1(inst, name);
+
     if (res == NULL && (func = inst->in_class->cl_getattr) != NULL) {
+
         PyObject *args;
         if (!PyErr_ExceptionMatches(PyExc_AttributeError))
             return NULL;
+            
         PyErr_Clear();
         args = PyTuple_Pack(2, inst, name);
         if (args == NULL)
             return NULL;
+
         res = PyEval_CallObject(func, args);
         Py_DECREF(args);
     }
@@ -925,13 +952,18 @@ instance_setattr1(PyInstanceObject *inst, PyObject *name, PyObject *v)
 
 static int
 instance_setattr(PyInstanceObject *inst, PyObject *name, PyObject *v)
-{
+{   // @ PyInstance_Type.tp_setattro
+
     PyObject *func, *args, *res, *tmp;
     char *sname = PyString_AsString(name);
+
     if (sname[0] == '_' && sname[1] == '_') {
+
         Py_ssize_t n = PyString_Size(name);
         if (sname[n-1] == '_' && sname[n-2] == '_') {
+
             if (strcmp(sname, "__dict__") == 0) {
+
                 if (PyEval_GetRestricted()) {
                     PyErr_SetString(PyExc_RuntimeError,
                  "__dict__ not accessible in restricted mode");
@@ -948,7 +980,9 @@ instance_setattr(PyInstanceObject *inst, PyObject *name, PyObject *v)
                 Py_DECREF(tmp);
                 return 0;
             }
+
             if (strcmp(sname, "__class__") == 0) {
+
                 if (PyEval_GetRestricted()) {
                     PyErr_SetString(PyExc_RuntimeError,
                 "__class__ not accessible in restricted mode");
@@ -967,19 +1001,23 @@ instance_setattr(PyInstanceObject *inst, PyObject *name, PyObject *v)
             }
         }
     }
+
     if (v == NULL)
         func = inst->in_class->cl_delattr;
     else
         func = inst->in_class->cl_setattr;
     if (func == NULL)
         return instance_setattr1(inst, name, v);
+
     if (v == NULL)
         args = PyTuple_Pack(2, inst, name);
     else
         args = PyTuple_Pack(3, inst, name, v);
     if (args == NULL)
         return -1;
+
     res = PyEval_CallObject(func, args);
+
     Py_DECREF(args);
     if (res == NULL)
         return -1;
@@ -1002,10 +1040,10 @@ instance_repr(PyInstanceObject *inst)
             return NULL;
     }
 
-    // class 类实例（对象）的 "__repr__" 属性
+    // 获取 class 类实例（对象）的 "__repr__" 属性
     func = instance_getattr(inst, reprstr);
 
-    // 获取默认 repr 处理
+    // 对 repr 的默认处理
     if (func == NULL) {
 
         PyObject *classname, *mod;
@@ -1054,13 +1092,18 @@ instance_str(PyInstanceObject *inst)
         if (strstr == NULL)
             return NULL;
     }
+
+    // 获取 class 类实例（对象）的 "__str__" 属性
     func = instance_getattr(inst, strstr);
+
+    // 对 str 的默认处理
     if (func == NULL) {
         if (!PyErr_ExceptionMatches(PyExc_AttributeError))
             return NULL;
         PyErr_Clear();
         return instance_repr(inst);
     }
+
     res = PyEval_CallObject(func, (PyObject *)NULL);
     Py_DECREF(func);
     return res;
@@ -1079,7 +1122,9 @@ instance_hash(PyInstanceObject *inst)
         if (hashstr == NULL)
             return -1;
     }
+
     func = instance_getattr(inst, hashstr);
+
     if (func == NULL) {
         if (!PyErr_ExceptionMatches(PyExc_AttributeError))
             return -1;
@@ -1115,6 +1160,7 @@ instance_hash(PyInstanceObject *inst)
         PyErr_SetString(PyExc_TypeError, "unhashable instance");
         return -1;
     }
+
     res = PyEval_CallObject(func, (PyObject *)NULL);
     Py_DECREF(func);
     if (res == NULL)
@@ -1154,11 +1200,14 @@ instance_length(PyInstanceObject *inst)
         if (lenstr == NULL)
             return -1;
     }
+
     func = instance_getattr(inst, lenstr);
     if (func == NULL)
         return -1;
+
     res = PyEval_CallObject(func, (PyObject *)NULL);
     Py_DECREF(func);
+    
     if (res == NULL)
         return -1;
     if (PyInt_Check(res)) {
