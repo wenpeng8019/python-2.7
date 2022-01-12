@@ -675,10 +675,14 @@ pgen(node *n)
     nfagrammar *gr;
     grammar *g;
 
+    // 编译语法树
     gr = metacompile(n);
+
+
     g = maketables(gr);
     translatelabels(g);
     addfirstsets(g);
+    
     PyObject_FREE(gr);
     return g;
 }

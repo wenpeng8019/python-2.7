@@ -104,14 +104,18 @@ getgrammar(char *filename)
     g0 = meta_grammar();
 
     // 解析 'Python.asdl' 源文件
-    // + 构建分词树
-    n = PyParser_ParseFile(fp, filename, g0, g0->g_start,
-                  (char *)NULL, (char *)NULL, &err);
+    // + 构建语法树
+    n = PyParser_ParseFile(fp, filename, 
+                           g0, g0->g_start,
+                           (char *)NULL, (char *)NULL, &err);
     fclose(fp);
 
+    // 语法树构建失败
     if (n == NULL) {
+
         fprintf(stderr, "Parsing error %d, line %d.\n",
             err.error, err.lineno);
+
         if (err.text != NULL) {
             size_t i;
             fprintf(stderr, "%s", err.text);
@@ -127,10 +131,11 @@ getgrammar(char *filename)
             fprintf(stderr, "^\n");
             PyObject_FREE(err.text);
         }
+
         Py_Exit(1);
     }
 
-    //（根据分词树）生成语法定义树（语义树）
+    // 根据 'Python.asdl' 语法树，生成 Python 语言的语法定义树（语义树）
     g = pgen(n);
     if (g == NULL) {
         printf("Bad grammar.\n");

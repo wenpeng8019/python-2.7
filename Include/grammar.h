@@ -10,7 +10,7 @@ extern "C" {
 #include "bitset.h" /* Sigh... */
 
 /* A label of an arc */
-// 标签
+// 语法关键词表项
 
 typedef struct {
     int		 lb_type;
@@ -20,6 +20,7 @@ typedef struct {
 #define EMPTY 0		/* Label number 0 is by definition the empty label */
 
 /* A list of labels */
+// 语法关键词表
 
 typedef struct {
     int		 ll_nlabels;
@@ -69,7 +70,7 @@ typedef struct {
     int		 g_ndfas;
     dfa		*g_dfa;		/* Array of DFAs */
 
-    // 标签列表
+    // 语法关键词表
     labellist	 g_ll;
 
     int		 g_start;	/* Start symbol of the grammar */

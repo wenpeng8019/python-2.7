@@ -151,15 +151,22 @@ classify(parser_state *ps, int type, char *str)
     grammar *g = ps->p_grammar;
     register int n = g->g_ll.ll_nlabels;
 
+    // 如果分词是一个命名
     if (type == NAME) {
+
         register char *s = str;
+
+        // 遍历语法关键词表
         register label *l = g->g_ll.ll_label;
         register int i;
         for (i = n; i > 0; i--, l++) {
-            if (l->lb_type != NAME || l->lb_str == NULL ||
-                l->lb_str[0] != s[0] ||
-                strcmp(l->lb_str, s) != 0)
+
+            // 和当前关键词项不匹配，跳过
+            if (l->lb_type != NAME || 
+                l->lb_str == NULL || 
+                l->lb_str[0] != s[0] || strcmp(l->lb_str, s) != 0)
                 continue;
+
 #ifdef PY_PARSER_REQUIRES_FUTURE_KEYWORD
             if (ps->p_flags & CO_FUTURE_PRINT_FUNCTION &&
                 s[0] == 'p' && strcmp(s, "print") == 0) {
@@ -171,10 +178,14 @@ classify(parser_state *ps, int type, char *str)
         }
     }
 
+    // 如果分词是一个操作符
     {
+        // 遍历语法关键词表
         register label *l = g->g_ll.ll_label;
         register int i;
         for (i = n; i > 0; i--, l++) {
+
+            // 和当前关键词项匹配
             if (l->lb_type == type && l->lb_str == NULL) {
                 D(printf("It's a token we know\n"));
                 return n - i;
@@ -228,9 +239,18 @@ future_hack(parser_state *ps)
 }
 #endif /* future keyword */
 
+// 添加分词到分析器，并完成语法分析
+// + 关于参数
+//   type: 分词类型
+//   str: 分词字符串
+//   lineno: 分词所在行号
+//   col_offset: 分词在行中的偏移位置
+//   expected_ret: 用于返回此刻语境允许的关键词
 int
-PyParser_AddToken(register parser_state *ps, register int type, char *str,
-                  int lineno, int col_offset, int *expected_ret)
+PyParser_AddToken(register parser_state *ps, 
+                  register int type, char *str,
+                  int lineno, int col_offset,
+                  int *expected_ret)
 {
     register int ilabel;
     int err;
@@ -238,12 +258,14 @@ PyParser_AddToken(register parser_state *ps, register int type, char *str,
     D(printf("Token %s/'%s' ... ", _PyParser_TokenNames[type], str));
 
     /* Find out which label this token is */
+    // 获取当前分词对应的语法关键词定义项
     ilabel = classify(ps, type, str);
     if (ilabel < 0)
         return E_SYNTAX;
 
     /* Loop until the token is shifted or an error occurred */
     for (;;) {
+
         /* Fetch the current dfa and state */
         register dfa *d = ps->p_stack.s_top->s_dfa;
         register state *s = &d->d_state[ps->p_stack.s_top->s_state];
@@ -252,17 +274,23 @@ PyParser_AddToken(register parser_state *ps, register int type, char *str,
             d->d_name, ps->p_stack.s_top->s_state));
 
         /* Check accelerator */
+
+        // 如果该语法关键词，满足当前语法上下文语境
+        // + 也就是语法关键词，在当前语境支持的关键词的范围内
         if (s->s_lower <= ilabel && ilabel < s->s_upper) {
+
             register int x = s->s_accel[ilabel - s->s_lower];
             if (x != -1) {
+
+                // 
                 if (x & (1<<7)) {
+
                     /* Push non-terminal */
                     int nt = (x >> 8) + NT_OFFSET;
                     int arrow = x & ((1<<7)-1);
-                    dfa *d1 = PyGrammar_FindDFA(
-                        ps->p_grammar, nt);
-                    if ((err = push(&ps->p_stack, nt, d1,
-                        arrow, lineno, col_offset)) > 0) {
+
+                    dfa *d1 = PyGrammar_FindDFA(ps->p_grammar, nt);
+                    if ((err = push(&ps->p_stack, nt, d1, arrow, lineno, col_offset)) > 0) {
                         D(printf(" MemError: push\n"));
                         return err;
                     }
@@ -271,60 +299,67 @@ PyParser_AddToken(register parser_state *ps, register int type, char *str,
                 }
 
                 /* Shift the token */
-                if ((err = shift(&ps->p_stack, type, str,
-                                x, lineno, col_offset)) > 0) {
+                if ((err = shift(&ps->p_stack, type, str, x, lineno, col_offset)) > 0) {
                     D(printf(" MemError: shift.\n"));
                     return err;
                 }
                 D(printf(" Shift.\n"));
+                
                 /* Pop while we are in an accept-only state */
-                while (s = &d->d_state
-                                [ps->p_stack.s_top->s_state],
-                    s->s_accept && s->s_narcs == 1) {
+                while (s = &d->d_state[ps->p_stack.s_top->s_state], s->s_accept && s->s_narcs == 1) {
+
                     D(printf("  DFA '%s', state %d: "
                              "Direct pop.\n",
                              d->d_name,
                              ps->p_stack.s_top->s_state));
+
 #ifdef PY_PARSER_REQUIRES_FUTURE_KEYWORD
                     if (d->d_name[0] == 'i' &&
-                        strcmp(d->d_name,
-                           "import_stmt") == 0)
+                        strcmp(d->d_name, "import_stmt") == 0)
                         future_hack(ps);
 #endif
+
                     s_pop(&ps->p_stack);
                     if (s_empty(&ps->p_stack)) {
                         D(printf("  ACCEPT.\n"));
                         return E_DONE;
                     }
+
                     d = ps->p_stack.s_top->s_dfa;
                 }
+
                 return E_OK;
             }
         }
 
+        // 如果支持解析优化
         if (s->s_accept) {
+
 #ifdef PY_PARSER_REQUIRES_FUTURE_KEYWORD
-            if (d->d_name[0] == 'i' &&
-                strcmp(d->d_name, "import_stmt") == 0)
+            if (d->d_name[0] == 'i' && strcmp(d->d_name, "import_stmt") == 0)
                 future_hack(ps);
 #endif
+
             /* Pop this dfa and try again */
             s_pop(&ps->p_stack);
             D(printf(" Pop ...\n"));
+
             if (s_empty(&ps->p_stack)) {
                 D(printf(" Error: bottom of stack.\n"));
                 return E_SYNTAX;
             }
+
             continue;
         }
 
         /* Stuck, report syntax error */
         D(printf(" Error.\n"));
         if (expected_ret) {
+
             if (s->s_lower == s->s_upper - 1) {
+
                 /* Only one possible expected token */
-                *expected_ret = ps->p_grammar->
-                    g_ll.ll_label[s->s_lower].lb_type;
+                *expected_ret = ps->p_grammar-> g_ll.ll_label[s->s_lower].lb_type;
             }
             else
                 *expected_ret = -1;

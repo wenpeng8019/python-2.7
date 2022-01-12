@@ -1227,6 +1227,7 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
         register int altcol = 0;
         tok->atbol = 0;
 
+        // 计算行首缩进量
         for (;;) {
 
             c = tok_nextc(tok);
@@ -1252,9 +1253,7 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
         }
         tok_backup(tok, c);
         
-        /// 缩进后的第一个字符
-
-        // 如果是换行、或者注释
+        // 如果行首缩进后的第一个字符是换行、或者注释
         // + 说明是空行
         if (c == '#' || c == '\n') {
 
@@ -1263,12 +1262,17 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
                not passed to the parser as NEWLINE tokens,
                except *totally* empty lines in interactive
                mode, which signal the end of a command group. 
-               对于完全由空白符，或空白符 + 注释组成的行来说，不应对缩进造成影响
-               对于（命令行）交互模式来说，
+               对于空行、或完全由空白符，或空白符 + 注释组成的行来说，不应对缩进造成影响
+               不过，对于（命令行）交互模式来说，空行会影响缩进，
+               即会最为子代码块的结束，也就是会作为缩进回退处理
                */ 
-            
+
+            // 对于（命令行）交互模式的空行
+            // + 按子代码块结束处理，需要处理缩进回退
             if (col == 0 && c == '\n' && tok->prompt != NULL)
                 blankline = 0; /* Let it through */
+
+            // 
             else
                 blankline = 1; /* Ignore completely */
 
@@ -1276,9 +1280,8 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
                may need to skip to the end of a comment */
         }
 
-        /// 验证缩进有效性
-
         // 对于非空行，且未处于逻辑闭合区域内，即由 ()/[]/{} 符号定义的、递归的子区域
+        // + 计算缩进变更
         if (!blankline && tok->level == 0) {
 
             // 和当前（之前）的缩进一致
@@ -1337,18 +1340,23 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
                 }
             }
         }
-    }
+
+    } // if (tok->atbol)
 
     tok->start = tok->cur;
 
     /* Return pending indents/dedents */
-    // 返回缩进、缩进回退
-    // + 同时记录缩进深度
+    // 存在未处理完成的缩进变更
+    // + 这主要是因为发生了多级缩进回退
+    //   缩进的进入基本都是逐级进入的
     if (tok->pendin != 0) {
+
+        // 对于缩进回退
         if (tok->pendin < 0) {
             tok->pendin++;
             return DEDENT;
         }
+        // 对于缩进进入
         else {
             tok->pendin--;
             return INDENT;

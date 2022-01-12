@@ -30,7 +30,7 @@ struct tok_state {
     int indent;                 /* 当前缩进（在缩进状态栈中的）索引  Current indentation index */
     int indstack[MAXINDENT];    /* 缩进状态栈 Stack of indents */
     int atbol;                  /* 是否处于行首 Nonzero if at begin of new line */
-    int pendin;                 /* 当前所处（未闭合的）缩进层级。 Pending indents (if > 0) or dedents (if < 0) */
+    int pendin;                 /* 当前未处理完成的缩进变更数量。 Pending indents (if > 0) or dedents (if < 0) */
     char *prompt, *nextprompt;  /* 基于（命令行）交互模式的输入 For interactive prompting */
     int lineno;                 /* 当前行号 Current line number */
     int level;                  /* 由 () [] {} 定义的递归 sub 子逻辑区域的深度 () [] {} Parentheses nesting level */

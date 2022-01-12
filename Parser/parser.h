@@ -22,9 +22,12 @@ typedef struct {
 } stack;
 
 typedef struct {
+
 	stack	 	p_stack;	/* Stack of parser states */
 	grammar		*p_grammar;	/* Grammar to use */
-	node		*p_tree;	/* Top of parse tree */
+
+	node		*p_tree;	/* 根据语法规则构建的，基于语法结构，源码 token 结构树（的根节点） Top of parse tree */
+
 #ifdef PY_PARSER_REQUIRES_FUTURE_KEYWORD
 	unsigned long	p_flags;	/* see co_flags in Include/code.h */
 #endif
