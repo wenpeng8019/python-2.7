@@ -10,6 +10,7 @@ extern "C" {
 #include "bitset.h" /* Sigh... */
 
 /* A label of an arc */
+// 标签
 
 typedef struct {
     int		 lb_type;
@@ -26,6 +27,7 @@ typedef struct {
 } labellist;
 
 /* An arc from one state to another */
+// 从一个状态到另一个状态到（向量）弧
 
 typedef struct {
     short	a_lbl;		/* Label of this arc */
@@ -33,6 +35,7 @@ typedef struct {
 } arc;
 
 /* A state in a DFA */
+// DFA 的一个状态
 
 typedef struct {
     int		 s_narcs;
@@ -46,6 +49,7 @@ typedef struct {
 } state;
 
 /* A DFA */
+// 一个 DFA 对象
 
 typedef struct {
     int		 d_type;	/* Non-terminal this represents */
@@ -57,13 +61,20 @@ typedef struct {
 } dfa;
 
 /* A grammar */
+// 一个 grammar（语法）对象
 
 typedef struct {
+
+    // DFA 数组
     int		 g_ndfas;
     dfa		*g_dfa;		/* Array of DFAs */
+
+    // 标签列表
     labellist	 g_ll;
+
     int		 g_start;	/* Start symbol of the grammar */
     int		 g_accel;	/* Set if accelerators present */
+
 } grammar;
 
 /* FUNCTIONS */

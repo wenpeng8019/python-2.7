@@ -68,27 +68,39 @@ s_pop(register stack *s)
 
 /* PARSER CREATION */
 
+// 创建
 parser_state *
 PyParser_New(grammar *g, int start)
 {
     parser_state *ps;
 
+    // 添加默认优化器
     if (!g->g_accel)
         PyGrammar_AddAccelerators(g);
+
+    // 创建 parser（运行状态）对象
     ps = (parser_state *)PyMem_MALLOC(sizeof(parser_state));
     if (ps == NULL)
         return NULL;
+
+    // 初始化 parser（运行状态）对象
     ps->p_grammar = g;
 #ifdef PY_PARSER_REQUIRES_FUTURE_KEYWORD
     ps->p_flags = 0;
 #endif
+
+    // 创建语法树（根节点）
     ps->p_tree = PyNode_New(start);
     if (ps->p_tree == NULL) {
         PyMem_FREE(ps);
         return NULL;
     }
+
+    // 初始化遍历栈
     s_reset(&ps->p_stack);
+    // 将语法树根节点的 DFA 定义压栈
     (void) s_push(&ps->p_stack, PyGrammar_FindDFA(g, start), ps->p_tree);
+
     return ps;
 }
 

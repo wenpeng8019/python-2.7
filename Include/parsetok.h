@@ -7,6 +7,7 @@
 extern "C" {
 #endif
 
+// 词法分析错误状态信息
 typedef struct {
     int error;
     const char *filename;

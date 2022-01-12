@@ -1,4 +1,8 @@
 
+/* ASDL（Abstract Syntax Description Language）
+ * 抽象语法定义语言的语法定义
+ */
+
 #include "pgenheaders.h"
 #include "metagrammar.h"
 #include "grammar.h"

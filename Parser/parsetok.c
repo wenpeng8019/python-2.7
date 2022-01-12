@@ -51,12 +51,14 @@ PyParser_ParseStringFlagsFilenameEx(const char *s, const char *filename,
 
     initerr(err_ret, filename);
 
-    // 构建分词器
+    // 创建分词器
+    // + 如果错误，直接返回
     if ((tok = PyTokenizer_FromString(s, start == file_input)) == NULL) {
         err_ret->error = PyErr_Occurred() ? E_DECODE : E_NOMEM;
         return NULL;
     }
 
+    // 初始化分词器相关信息
     tok->filename = filename ? filename : "<string>";
     if (Py_TabcheckFlag || Py_VerboseFlag) {
         tok->altwarning = (tok->filename != NULL);
@@ -92,14 +94,17 @@ PyParser_ParseFileFlagsEx(FILE *fp, const char *filename, grammar *g, int start,
 {
     struct tok_state *tok;
 
+    // 初始化构造错误状态信息
     initerr(err_ret, filename);
 
-    // 构建分词器
+    // 创建分词器
+    // + 如果错误，直接返回
     if ((tok = PyTokenizer_FromFile(fp, ps1, ps2)) == NULL) {
         err_ret->error = E_NOMEM;
         return NULL;
     }
     
+    // 初始化分词器相关信息
     tok->filename = filename;
     if (Py_TabcheckFlag || Py_VerboseFlag) {
         tok->altwarning = (filename != NULL);
@@ -107,6 +112,7 @@ PyParser_ParseFileFlagsEx(FILE *fp, const char *filename, grammar *g, int start,
             tok->alterror++;
     }
 
+    // 执行词法分析
     return parsetok(tok, g, start, err_ret, flags);
 }
 
@@ -129,14 +135,20 @@ warn(const char *msg, const char *filename, int lineno)
 /* Parse input coming from the given tokenizer structure.
    Return error code. */
 
+// 执行词法分析
+// + 根据分词结构定义，解析输入的数据
+
 static node *
-parsetok(struct tok_state *tok, grammar *g, int start, perrdetail *err_ret,
-         int *flags)
+parsetok(struct tok_state *tok, 
+        grammar *g, int start,              // 语法定义
+        perrdetail *err_ret,                // 词法分析错误状态信息
+        int *flags)
 {
     parser_state *ps;
     node *n;
     int started = 0, handling_import = 0, handling_with = 0;
 
+    // 创建并初始化 parser（运行状态）对象
     if ((ps = PyParser_New(g, start)) == NULL) {
         fprintf(stderr, "no mem for new parser\n");
         err_ret->error = E_NOMEM;
@@ -150,9 +162,9 @@ parsetok(struct tok_state *tok, grammar *g, int start, perrdetail *err_ret,
     if (*flags & PyPARSE_UNICODE_LITERALS) {
         ps->p_flags |= CO_FUTURE_UNICODE_LITERALS;
     }
-
 #endif
 
+    // 根据语法树定义，执行词法分析
     for (;;) {
         char *a, *b;
         int type;
@@ -160,11 +172,13 @@ parsetok(struct tok_state *tok, grammar *g, int start, perrdetail *err_ret,
         char *str;
         int col_offset;
 
+        // 解析下一个分词（切词处理）
         type = PyTokenizer_Get(tok, &a, &b);
         if (type == ERRORTOKEN) {
             err_ret->error = tok->done;
             break;
         }
+
         if (type == ENDMARKER && started) {
             type = NEWLINE; /* Add an extra newline */
             handling_with = handling_import = 0;
@@ -181,6 +195,8 @@ parsetok(struct tok_state *tok, grammar *g, int start, perrdetail *err_ret,
         }
         else
             started = 1;
+
+        // 读取/创建分词字符串
         len = b - a; /* XXX this may compute NULL - NULL */
         str = (char *) PyObject_MALLOC(len + 1);
         if (str == NULL) {
@@ -194,11 +210,14 @@ parsetok(struct tok_state *tok, grammar *g, int start, perrdetail *err_ret,
 
 #ifdef PY_PARSER_REQUIRES_FUTURE_KEYWORD
 #endif
+
+        // 计算该分词在行中的偏移位置
         if (a >= tok->line_start)
             col_offset = a - tok->line_start;
         else
             col_offset = -1;
 
+        // 添加分词到 parser（运行状态）对象
         if ((err_ret->error =
              PyParser_AddToken(ps, (int)type, str, tok->lineno, col_offset,
                                &(err_ret->expected))) != E_OK) {
@@ -210,6 +229,7 @@ parsetok(struct tok_state *tok, grammar *g, int start, perrdetail *err_ret,
         }
     }
 
+    // 解析完成
     if (err_ret->error == E_DONE) {
         n = ps->p_tree;
         ps->p_tree = NULL;
@@ -222,10 +242,15 @@ parsetok(struct tok_state *tok, grammar *g, int start, perrdetail *err_ret,
 #endif
     PyParser_Delete(ps);
 
+    // 如果解析失败
     if (n == NULL) {
+
         if (tok->lineno <= 1 && tok->done == E_EOF)
             err_ret->error = E_EOF;
+
         err_ret->lineno = tok->lineno;
+
+        // 如果解析的是文本（不是文件）
         if (tok->buf != NULL) {
             char *text = NULL;
             size_t len;
@@ -246,7 +271,10 @@ parsetok(struct tok_state *tok, grammar *g, int start, perrdetail *err_ret,
             }
             err_ret->text = text;
         }
-    } else if (tok->encoding != NULL) {
+    }
+    // 解析成功，初始化文字编码
+    else if (tok->encoding != NULL) {
+
         /* 'nodes->n_str' uses PyObject_*, while 'tok->encoding' was
          * allocated using PyMem_
          */
@@ -260,9 +288,11 @@ parsetok(struct tok_state *tok, grammar *g, int start, perrdetail *err_ret,
             n = NULL;
             goto done;
         }
+        
         strcpy(r->n_str, tok->encoding);
         PyMem_FREE(tok->encoding);
         tok->encoding = NULL;
+        
         r->n_nchildren = 1;
         r->n_child = n;
         n = r;

@@ -13,6 +13,13 @@
    - check for duplicate definitions of names (instead of fatal err)
 */
 
+// 语法生成器主程序
+// + 该程序的第一个参数为 "语法定义文件" 的文件名
+//   执行后，该程序会在当前目录下输出两个文件
+//   - "graminit.c"
+//   - "graminit.h"
+
+
 #include "Python.h"
 #include "pgenheaders.h"
 #include "grammar.h"
@@ -48,7 +55,11 @@ main(int argc, char **argv)
     filename = argv[1];
     graminit_h = argv[2];
     graminit_c = argv[3];
+
+    // （从 "Python.asdl" 文件中解析）获取 Python 的语法定义树（语义树）
     g = getgrammar(filename);
+
+    // 保存 Python 语法定义树（语义树）到文件 "graminit.c"
     fp = fopen(graminit_c, "w");
     if (fp == NULL) {
         perror(graminit_c);
@@ -58,6 +69,8 @@ main(int argc, char **argv)
         printf("Writing %s ...\n", graminit_c);
     printgrammar(g, fp);
     fclose(fp);
+
+    // 保存 Python 语法定义树（语义树）到文件 "graminit.h"
     fp = fopen(graminit_h, "w");
     if (fp == NULL) {
         perror(graminit_h);
@@ -67,10 +80,12 @@ main(int argc, char **argv)
         printf("Writing %s ...\n", graminit_h);
     printnonterminals(g, fp);
     fclose(fp);
+    
     Py_Exit(0);
     return 0; /* Make gcc -Wall happy */
 }
 
+// （从 "Python.asdl" 文件中解析）获取 Python 的语法定义树（语义树）
 grammar *
 getgrammar(char *filename)
 {
@@ -84,10 +99,16 @@ getgrammar(char *filename)
         perror(filename);
         Py_Exit(1);
     }
+
+    // 获取抽象语法定义语言（ASDL）的语法定义树（语义树）
     g0 = meta_grammar();
+
+    // 解析 'Python.asdl' 源文件
+    // + 构建分词树
     n = PyParser_ParseFile(fp, filename, g0, g0->g_start,
                   (char *)NULL, (char *)NULL, &err);
     fclose(fp);
+
     if (n == NULL) {
         fprintf(stderr, "Parsing error %d, line %d.\n",
             err.error, err.lineno);
@@ -108,11 +129,14 @@ getgrammar(char *filename)
         }
         Py_Exit(1);
     }
+
+    //（根据分词树）生成语法定义树（语义树）
     g = pgen(n);
     if (g == NULL) {
         printf("Bad grammar.\n");
         Py_Exit(1);
     }
+
     return g;
 }
 

@@ -709,9 +709,11 @@ decode_str(const char *input, int single, struct tok_state *tok)
 struct tok_state *
 PyTokenizer_FromString(const char *str, int exec_input)
 {
+    // 创建 Tokenizer（状态）对象
     struct tok_state *tok = tok_new();
     if (tok == NULL)
         return NULL;
+
     str = (char *)decode_str(str, exec_input, tok);
     if (str == NULL) {
         PyTokenizer_Free(tok);
@@ -729,18 +731,23 @@ PyTokenizer_FromString(const char *str, int exec_input)
 struct tok_state *
 PyTokenizer_FromFile(FILE *fp, char *ps1, char *ps2)
 {
+    // 创建 Tokenizer（状态）对象
     struct tok_state *tok = tok_new();
     if (tok == NULL)
         return NULL;
+
+    // 创建数据读取缓冲
     if ((tok->buf = (char *)PyMem_MALLOC(BUFSIZ)) == NULL) {
         PyTokenizer_Free(tok);
         return NULL;
     }
+
     tok->cur = tok->inp = tok->buf;
     tok->end = tok->buf + BUFSIZ;
     tok->fp = fp;
     tok->prompt = ps1;
     tok->nextprompt = ps2;
+
     return tok;
 }
 
@@ -1014,17 +1021,18 @@ tok_backup(register struct tok_state *tok, register int c)
 
 /* Return the token corresponding to a single character */
 
+// 由一个字符定义的 token
 int
 PyToken_OneChar(int c)
 {
     switch (c) {
-    case '(':           return LPAR;
-    case ')':           return RPAR;
-    case '[':           return LSQB;
-    case ']':           return RSQB;
-    case ':':           return COLON;
-    case ',':           return COMMA;
-    case ';':           return SEMI;
+    case '(':           return LPAR;            // param left
+    case ')':           return RPAR;            // param right
+    case '[':           return LSQB;            // sequence bar left
+    case ']':           return RSQB;            // sequence bar right
+    case ':':           return COLON;           // colon
+    case ',':           return COMMA;           // comma
+    case ';':           return SEMI;            // semi
     case '+':           return PLUS;
     case '-':           return MINUS;
     case '*':           return STAR;
@@ -1047,79 +1055,81 @@ PyToken_OneChar(int c)
 }
 
 
+// 由两个字符定义的 token
 int
 PyToken_TwoChars(int c1, int c2)
 {
     switch (c1) {
     case '=':
         switch (c2) {
-        case '=':               return EQEQUAL;
+        case '=':               return EQEQUAL;                 // "=="
         }
         break;
     case '!':
         switch (c2) {
-        case '=':               return NOTEQUAL;
+        case '=':               return NOTEQUAL;                // "!="
         }
         break;
     case '<':
         switch (c2) {
-        case '>':               return NOTEQUAL;
-        case '=':               return LESSEQUAL;
-        case '<':               return LEFTSHIFT;
+        case '>':               return NOTEQUAL;                // "<>"
+        case '=':               return LESSEQUAL;               // "<="
+        case '<':               return LEFTSHIFT;               // "<<"
         }
         break;
     case '>':
         switch (c2) {
-        case '=':               return GREATEREQUAL;
-        case '>':               return RIGHTSHIFT;
+        case '=':               return GREATEREQUAL;            // ">="
+        case '>':               return RIGHTSHIFT;              // ">>"
         }
         break;
     case '+':
         switch (c2) {
-        case '=':               return PLUSEQUAL;
+        case '=':               return PLUSEQUAL;               // "+="
         }
         break;
     case '-':
         switch (c2) {
-        case '=':               return MINEQUAL;
+        case '=':               return MINEQUAL;                // "-="
         }
         break;
     case '*':
         switch (c2) {
-        case '*':               return DOUBLESTAR;
-        case '=':               return STAREQUAL;
+        case '*':               return DOUBLESTAR;              // "**"
+        case '=':               return STAREQUAL;               // "*="
         }
         break;
     case '/':
         switch (c2) {
-        case '/':               return DOUBLESLASH;
-        case '=':               return SLASHEQUAL;
+        case '/':               return DOUBLESLASH;             // "//"
+        case '=':               return SLASHEQUAL;              // "/="
         }
         break;
     case '|':
         switch (c2) {
-        case '=':               return VBAREQUAL;
+        case '=':               return VBAREQUAL;               // "|="  位或
         }
         break;
     case '%':
         switch (c2) {
-        case '=':               return PERCENTEQUAL;
+        case '=':               return PERCENTEQUAL;            // "%="  取余
         }
         break;
     case '&':
         switch (c2) {
-        case '=':               return AMPEREQUAL;
+        case '=':               return AMPEREQUAL;              // "&="  位与
         }
         break;
     case '^':
         switch (c2) {
-        case '=':               return CIRCUMFLEXEQUAL;
+        case '=':               return CIRCUMFLEXEQUAL;         // "^="  抑或
         }
         break;
     }
     return OP;
 }
 
+// 由三个字符定义的 token
 int
 PyToken_ThreeChars(int c1, int c2, int c3)
 {
@@ -1129,7 +1139,7 @@ PyToken_ThreeChars(int c1, int c2, int c3)
         case '<':
             switch (c3) {
             case '=':
-                return LEFTSHIFTEQUAL;
+                return LEFTSHIFTEQUAL;                          // "<<="
             }
             break;
         }
@@ -1139,7 +1149,7 @@ PyToken_ThreeChars(int c1, int c2, int c3)
         case '>':
             switch (c3) {
             case '=':
-                return RIGHTSHIFTEQUAL;
+                return RIGHTSHIFTEQUAL;                         // ">>="
             }
             break;
         }
@@ -1149,7 +1159,7 @@ PyToken_ThreeChars(int c1, int c2, int c3)
         case '*':
             switch (c3) {
             case '=':
-                return DOUBLESTAREQUAL;
+                return DOUBLESTAREQUAL;                         // "**="
             }
             break;
         }
@@ -1159,7 +1169,7 @@ PyToken_ThreeChars(int c1, int c2, int c3)
         case '/':
             switch (c3) {
             case '=':
-                return DOUBLESLASHEQUAL;
+                return DOUBLESLASHEQUAL;                        // "//="
             }
             break;
         }
@@ -1185,6 +1195,13 @@ indenterror(struct tok_state *tok)
 }
 
 /* Get next token, after space stripping etc. */
+// 获取下一个分词（切词）
+// + 这里只是将文本按最小的词逻辑单元进行切分，并不会对具体的词含义进行解析
+//   具体包括：
+//   > 对换行、空白符、缩进的解析
+//   > 对由 ""、'' 所定义的字符串对象的解析
+//   > 对满足命名规则的单词进行解析
+//   > 对非单词运算符字符进行解析
 
 static int
 tok_get(register struct tok_state *tok, char **p_start, char **p_end)
@@ -1193,78 +1210,127 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
     int blankline;
 
     *p_start = *p_end = NULL;
+ 
+  // 开始一个新行
   nextline:
+
     tok->start = NULL;
     blankline = 0;
 
     /* Get indentation level */
-    if (tok->atbol) {
+    /// 计算缩进深度
+
+    // 如果当前处于行首
+    if (tok->atbol/* at the begin of line */) {
+
         register int col = 0;
         register int altcol = 0;
         tok->atbol = 0;
+
         for (;;) {
+
             c = tok_nextc(tok);
+
+            // 对于 ' ' 字符
             if (c == ' ')
                 col++, altcol++;
+
+            // 对于 '\t' 字符
+            // + 执行 tab 制表符对齐处理
             else if (c == '\t') {
+
                 col = (col/tok->tabsize + 1) * tok->tabsize;
-                altcol = (altcol/tok->alttabsize + 1)
-                    * tok->alttabsize;
+                altcol = (altcol/tok->alttabsize + 1) * tok->alttabsize;
             }
+
+            // 对于换页符
             else if (c == '\014') /* Control-L (formfeed) */
-                col = altcol = 0; /* For Emacs users */
+                col = altcol = 0; /* For Emacs users 源自 Editor MACroS，一个 GNU 宏编辑器 */
+
             else
                 break;
         }
         tok_backup(tok, c);
+        
+        /// 缩进后的第一个字符
+
+        // 如果是换行、或者注释
+        // + 说明是空行
         if (c == '#' || c == '\n') {
+
             /* Lines with only whitespace and/or comments
                shouldn't affect the indentation and are
                not passed to the parser as NEWLINE tokens,
                except *totally* empty lines in interactive
-               mode, which signal the end of a command group. */
+               mode, which signal the end of a command group. 
+               对于完全由空白符，或空白符 + 注释组成的行来说，不应对缩进造成影响
+               对于（命令行）交互模式来说，
+               */ 
+            
             if (col == 0 && c == '\n' && tok->prompt != NULL)
                 blankline = 0; /* Let it through */
             else
                 blankline = 1; /* Ignore completely */
+
             /* We can't jump back right here since we still
                may need to skip to the end of a comment */
         }
+
+        /// 验证缩进有效性
+
+        // 对于非空行，且未处于逻辑闭合区域内，即由 ()/[]/{} 符号定义的、递归的子区域
         if (!blankline && tok->level == 0) {
+
+            // 和当前（之前）的缩进一致
+            // + 缩进未变化
             if (col == tok->indstack[tok->indent]) {
+
                 /* No change */
+                // 存在 ' ' 和 '\t' 混用的情况
                 if (altcol != tok->altindstack[tok->indent]) {
                     if (indenterror(tok))
                         return ERRORTOKEN;
                 }
             }
+            // 缩进增加：发生了新的缩进
             else if (col > tok->indstack[tok->indent]) {
+
                 /* Indent -- always one */
+                // 超出最大值
                 if (tok->indent+1 >= MAXINDENT) {
                     tok->done = E_TOODEEP;
                     tok->cur = tok->inp;
                     return ERRORTOKEN;
                 }
+
+                // 存在 ' ' 和 '\t' 混用的情况
                 if (altcol <= tok->altindstack[tok->indent]) {
                     if (indenterror(tok))
                         return ERRORTOKEN;
                 }
+
+                // 缩进入栈
                 tok->pendin++;
                 tok->indstack[++tok->indent] = col;
                 tok->altindstack[tok->indent] = altcol;
             }
+            // 缩进减少：出现了缩进回退
             else /* col < tok->indstack[tok->indent] */ {
+
                 /* Dedent -- any number, must be consistent */
-                while (tok->indent > 0 &&
-                    col < tok->indstack[tok->indent]) {
+                // 多级回退
+                while (tok->indent > 0 && col < tok->indstack[tok->indent]) {
                     tok->pendin--;
                     tok->indent--;
                 }
+
+                // （同级别缩进）深度不一致
                 if (col != tok->indstack[tok->indent]) {
                     tok->done = E_DEDENT;
                     tok->cur = tok->inp;
                     return ERRORTOKEN;
                 }
+
                 if (altcol != tok->altindstack[tok->indent]) {
                     if (indenterror(tok))
                         return ERRORTOKEN;
@@ -1276,6 +1342,8 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
     tok->start = tok->cur;
 
     /* Return pending indents/dedents */
+    // 返回缩进、缩进回退
+    // + 同时记录缩进深度
     if (tok->pendin != 0) {
         if (tok->pendin < 0) {
             tok->pendin++;
@@ -1289,16 +1357,25 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
 
  again:
     tok->start = NULL;
+
+
     /* Skip spaces */
+    // 跳过空白符
     do {
+        // 读取下一个字符
         c = tok_nextc(tok);
     } while (c == ' ' || c == '\t' || c == '\014');
 
     /* Set start of current token */
+    // 设置字符 c 的位置
+    // + 此时 cur 指向 c 的下一个字符
     tok->start = tok->cur - 1;
 
     /* Skip comment, while looking for tab-setting magic */
+    // 如果是注释
+    // + 跳过注释
     if (c == '#') {
+
         static char *tabforms[] = {
             "tab-width:",                       /* Emacs */
             ":tabstop=",                        /* vim, full form */
@@ -1334,14 +1411,22 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
     }
 
     /* Check for EOF and errors now */
+    // 如果文件读取完成
     if (c == EOF) {
         return tok->done == E_EOF ? ENDMARKER : ERRORTOKEN;
     }
 
     /* Identifier (most frequent token!) */
+    // 对于 "命名标识"（最常出现的分词）
     if (Py_ISALPHA(c) || c == '_') {
+
         /* Process r"", u"" and ur"" */
+        // 处理以 br"", r"" and ur"" 开头的命名
         switch (c) {
+
+        // 对于 b" 或 br"
+        // + 也就是 b"" 或 br""（字节）字符串
+        //   跳到对字符串处理部分
         case 'b':
         case 'B':
             c = tok_nextc(tok);
@@ -1350,12 +1435,20 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
             if (c == '"' || c == '\'')
                 goto letter_quote;
             break;
+
+        // 对于 r"
+        // + 也就是 r"" 字符串
+        //   跳到对字符串处理部分
         case 'r':
         case 'R':
             c = tok_nextc(tok);
             if (c == '"' || c == '\'')
                 goto letter_quote;
             break;
+
+        // 对于 u" 或 ur"
+        // + 也就是 r"" 或 ur""（unicode）字符串
+        //   跳到对字符串处理部分
         case 'u':
         case 'U':
             c = tok_nextc(tok);
@@ -1365,23 +1458,32 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
                 goto letter_quote;
             break;
         }
+
+        // 跳过命名前面的 '_' 字符和数字字符，也就是从第一个字母字符开始
         while (c != EOF && (Py_ISALNUM(c) || c == '_')) {
             c = tok_nextc(tok);
         }
+        // 将 peek 出的第一个字母字符重新放回去
         tok_backup(tok, c);
+
         *p_start = tok->start;
         *p_end = tok->cur;
+
         return NAME;
     }
 
     /* Newline */
+    // 如果是新的一行
     if (c == '\n') {
+
         tok->atbol = 1;
         if (blankline || tok->level > 0)
             goto nextline;
+
         *p_start = tok->start;
         *p_end = tok->cur - 1; /* Leave '\n' out of the string */
         tok->cont_line = 0;
+
         return NEWLINE;
     }
 
@@ -1400,6 +1502,7 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
     }
 
     /* Number */
+    // 对于数字的解析
     if (isdigit(c)) {
         if (c == '0') {
             /* Hex, octal or binary -- maybe. */
@@ -1522,6 +1625,7 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
         return NUMBER;
     }
 
+  // 对字符串的分词
   letter_quote:
     /* String */
     if (c == '\'' || c == '"') {
@@ -1562,6 +1666,7 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
                 if (!triple || tripcount == 3)
                     break;
             }
+            // 对于转译字符
             else if (c == '\\') {
                 tripcount = 0;
                 c = tok_nextc(tok);
@@ -1574,12 +1679,14 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
             else
                 tripcount = 0;
         }
+
         *p_start = tok->start;
         *p_end = tok->cur;
         return STRING;
     }
 
     /* Line continuation */
+    // 对于多行连接字符
     if (c == '\\') {
         c = tok_nextc(tok);
         if (c != '\n') {
@@ -1591,10 +1698,15 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
         goto again; /* Read next line */
     }
 
+    /// 这里采用最大深度匹配机制
+
     /* Check for two-character token */
+
     {
+        // 解析由两个字符所定义的 token
         int c2 = tok_nextc(tok);
         int token = PyToken_TwoChars(c, c2);
+
 #ifndef PGEN
         if (Py_Py3kWarningFlag && token == NOTEQUAL && c == '<') {
             if (PyErr_WarnExplicit(PyExc_DeprecationWarning,
@@ -1605,28 +1717,44 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
             }
         }
 #endif
+
+        // 如果满足双字符 token 定义
         if (token != OP) {
+
+            // 继续看是否是三字符 token
             int c3 = tok_nextc(tok);
             int token3 = PyToken_ThreeChars(c, c2, c3);
+
+            // 如果满足三字符 token 定义
+            // 更新返回的 token 定义
             if (token3 != OP) {
                 token = token3;
-            } else {
+            } 
+            // 否则回退该字符
+            // + 返回值保持之前的双字符 token 定义
+            else {
                 tok_backup(tok, c3);
             }
+
             *p_start = tok->start;
             *p_end = tok->cur;
             return token;
         }
+
+        // 回退该字符
         tok_backup(tok, c2);
     }
 
     /* Keep track of parentheses nesting level */
+    // 解析具有递归性质的符号
     switch (c) {
+        // 增加递归深度
     case '(':
     case '[':
     case '{':
         tok->level++;
         break;
+        // 减少递归深度
     case ')':
     case ']':
     case '}':
@@ -1635,8 +1763,11 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
     }
 
     /* Punctuation character */
+    // 
     *p_start = tok->start;
     *p_end = tok->cur;
+
+    // 默认按单字符 token 定义处理
     return PyToken_OneChar(c);
 }
 

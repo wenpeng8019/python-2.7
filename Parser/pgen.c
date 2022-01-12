@@ -15,6 +15,11 @@ extern int Py_IgnoreEnvironmentFlag; /* needed by Py_GETENV */
 
 
 /* PART ONE -- CONSTRUCT NFA -- Cf. Algorithm 3.2 from [Aho&Ullman 77] */
+// 第一部分：非确定有限自动机(Nondeterministic Finite Automaton) 
+// + NFA 是基于表达式的（Regex-Directed）
+//   NFA 比较慢，但提供了Backtrack功能。
+//   NFA 引擎可能处于一组状态之中的任何一个。
+//   所以，NFA引擎必须记录所有的可能路径（trace multiple possible routes through the NFA）
 
 typedef struct _nfaarc {
     int         ar_label;
@@ -338,6 +343,10 @@ dumpnfa(labellist *ll, nfa *nf)
 
 
 /* PART TWO -- CONSTRUCT DFA -- Algorithm 3.1 from [Aho&Ullman 77] */
+// 第二部分：确定有限自动机(Deterministic Finite Automaton) 
+// + DFA 是基于文本的（Text-Directed）
+//   DFA 比 NFA 快，但不支持回溯（Backtrack）功能
+//   DFA 引擎在任意时刻必定处于某个确定的状态
 
 static void
 addclosure(bitset ss, nfa *nf, int istate)
@@ -524,6 +533,7 @@ printssdfa(int xx_nstates, ss_state *xx_state, int nbits,
 
 
 /* PART THREE -- SIMPLIFY DFA */
+// 第三部分：简化 DFA
 
 /* Simplify the DFA by repeatedly eliminating states that are
    equivalent to another oner.  This is NOT Algorithm 3.3 from
@@ -592,6 +602,7 @@ simplify(int xx_nstates, ss_state *xx_state)
 
 
 /* PART FOUR -- GENERATE PARSING TABLES */
+// 第四部分：生成分析表
 
 /* Convert the DFA into a grammar that can be used by our parser */
 
@@ -628,6 +639,7 @@ convert(dfa *d, int xx_nstates, ss_state *xx_state)
 
 
 /* PART FIVE -- GLUE IT ALL TOGETHER */
+// 第五部分：放到一起，集成起来
 
 static grammar *
 maketables(nfagrammar *gr)
