@@ -19,7 +19,6 @@
 //   - "graminit.c"
 //   - "graminit.h"
 
-
 #include "Python.h"
 #include "pgenheaders.h"
 #include "grammar.h"
@@ -56,7 +55,7 @@ main(int argc, char **argv)
     graminit_h = argv[2];
     graminit_c = argv[3];
 
-    // （从 "Python.asdl" 文件中解析）获取 Python 的语法定义树（语义树）
+    // （从 "/Grammar/Grammar" 源码文件中解析）获取 Python 的语法定义树（语义树）
     g = getgrammar(filename);
 
     // 保存 Python 语法定义树（语义树）到文件 "graminit.c"
@@ -85,7 +84,7 @@ main(int argc, char **argv)
     return 0; /* Make gcc -Wall happy */
 }
 
-// （从 "Python.asdl" 文件中解析）获取 Python 的语法定义树（语义树）
+// （从 "/Grammar/Grammar" 源码文件中解析）获取 Python 的语法定义树（语义树）
 grammar *
 getgrammar(char *filename)
 {
@@ -100,10 +99,10 @@ getgrammar(char *filename)
         Py_Exit(1);
     }
 
-    // 获取抽象语法定义语言（ASDL）的语法定义树（语义树）
+    // 获取（预置的）Python 语法定义语言的，语法定义树（语义树）
     g0 = meta_grammar();
 
-    // 解析 'Python.asdl' 源文件
+    // 解析 '/Grammar/Grammar'（Python 语法定义语言）源码文件
     // + 构建语法树
     n = PyParser_ParseFile(fp, filename, 
                            g0, g0->g_start,
@@ -135,7 +134,7 @@ getgrammar(char *filename)
         Py_Exit(1);
     }
 
-    // 根据 'Python.asdl' 语法树，生成 Python 语言的语法定义树（语义树）
+    // 根据 '/Grammar/Grammar' 源码的语法树，生成 Python 语言的语法定义树（语义树）
     g = pgen(n);
     if (g == NULL) {
         printf("Bad grammar.\n");

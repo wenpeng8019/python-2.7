@@ -159,11 +159,19 @@ metacompile(node *n)
 
     if (Py_DebugFlag)
         printf("Compiling (meta-) parse tree into NFA grammar\n");
+
+    // 创建 NFA 语法树
     gr = newnfagrammar();
+
+    // 验证语法树根节点的类型必须为 MSTART（meta start）
     REQ(n, MSTART);
+
+    // 遍历子节点
     i = n->n_nchildren - 1; /* Last child is ENDMARKER */
     n = n->n_child;
     for (; --i >= 0; n++) {
+
+        // 对于非空行
         if (n->n_type != NEWLINE)
             compile_rule(gr, n);
     }
@@ -682,7 +690,7 @@ pgen(node *n)
     g = maketables(gr);
     translatelabels(g);
     addfirstsets(g);
-    
+
     PyObject_FREE(gr);
     return g;
 }

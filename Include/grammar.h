@@ -73,7 +73,10 @@ typedef struct {
     // 语法关键词表
     labellist	 g_ll;
 
+    // 语义树入口
     int		 g_start;	/* Start symbol of the grammar */
+
+    // 是否指定了（存在）优化器
     int		 g_accel;	/* Set if accelerators present */
 
 } grammar;

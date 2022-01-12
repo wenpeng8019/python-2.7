@@ -8,12 +8,14 @@ extern "C" {
 #endif
 
 typedef struct _node {
-    short		n_type;
-    char		*n_str;
-    int			n_lineno;
-    int			n_col_offset;
-    int			n_nchildren;
-    struct _node	*n_child;
+
+    short		n_type;                 // 节点类型
+    char		*n_str;                 // 该节点的 token 字符串
+    int			n_lineno;               // token 所在行号
+    int			n_col_offset;           // token 在行中的偏移量
+
+    int			n_nchildren;            // 子节点数量
+    struct _node	*n_child;           // 子节点列表
 } node;
 
 PyAPI_FUNC(node *) PyNode_New(int type);
