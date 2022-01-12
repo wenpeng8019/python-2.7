@@ -99,10 +99,11 @@ getgrammar(char *filename)
         Py_Exit(1);
     }
 
-    // 获取（预置的）Python 语法定义语言的，语法定义树（语义树）
+    // 获取（预置的）meta grammar 语义树
+    // + 用于解析 '/Grammar/Grammar'（Python 语言语法规范定义）源码文件
     g0 = meta_grammar();
 
-    // 解析 '/Grammar/Grammar'（Python 语法定义语言）源码文件
+    // 解析 '/Grammar/Grammar' 源码文件
     // + 构建语法树
     n = PyParser_ParseFile(fp, filename, 
                            g0, g0->g_start,
@@ -134,7 +135,7 @@ getgrammar(char *filename)
         Py_Exit(1);
     }
 
-    // 根据 '/Grammar/Grammar' 源码的语法树，生成 Python 语言的语法定义树（语义树）
+    // 根据 '/Grammar/Grammar' 源码的语法树，生成 Python 语言语法语义树
     g = pgen(n);
     if (g == NULL) {
         printf("Bad grammar.\n");

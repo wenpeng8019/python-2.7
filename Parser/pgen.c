@@ -13,6 +13,7 @@
 extern int Py_DebugFlag;
 extern int Py_IgnoreEnvironmentFlag; /* needed by Py_GETENV */
 
+///////////////////////////////////////////////////////////////////////////////
 
 /* PART ONE -- CONSTRUCT NFA -- Cf. Algorithm 3.2 from [Aho&Ullman 77] */
 // 第一部分：非确定有限自动机(Nondeterministic Finite Automaton) 
@@ -51,7 +52,10 @@ static void compile_atom(labellist *ll,
 
 static int
 addnfastate(nfa *nf)
-{
+{   // @ compile_rhs
+    // @ compile_item
+    // @ compile_atom
+
     nfastate *st;
 
     nf->nf_state = (nfastate *)PyObject_REALLOC(nf->nf_state,
@@ -66,7 +70,11 @@ addnfastate(nfa *nf)
 
 static void
 addnfaarc(nfa *nf, int from, int to, int lbl)
-{
+{   // @ compile_rhs
+    // @ compile_alt
+    // @ compile_item
+    // @ compile_atom
+
     nfastate *st;
     nfaarc *ar;
 
@@ -82,7 +90,8 @@ addnfaarc(nfa *nf, int from, int to, int lbl)
 
 static nfa *
 newnfa(char *name)
-{
+{   // @ addnfa
+
     nfa *nf;
     static int type = NT_OFFSET; /* All types will be disjunct */
 
@@ -108,7 +117,8 @@ static void compile_rule(nfagrammar *gr, node *n);
 
 static nfagrammar *
 newnfagrammar(void)
-{
+{   // @ metacompile
+
     nfagrammar *gr;
 
     gr = (nfagrammar *)PyObject_MALLOC(sizeof(nfagrammar));
@@ -124,7 +134,8 @@ newnfagrammar(void)
 
 static nfa *
 addnfa(nfagrammar *gr, char *name)
-{
+{   // @ compile_rule
+
     nfa *nf;
 
     nf = newnfa(name);
@@ -153,17 +164,18 @@ static char REQNFMT[] = "metacompile: less than %d children\n";
 
 static nfagrammar *
 metacompile(node *n)
-{
+{   // @ pgen
+
     nfagrammar *gr;
     int i;
 
     if (Py_DebugFlag)
         printf("Compiling (meta-) parse tree into NFA grammar\n");
 
-    // 创建 NFA 语法树
+    // 创建 NFA 语义树
     gr = newnfagrammar();
 
-    // 验证语法树根节点的类型必须为 MSTART（meta start）
+    // 验证（基于 meta grammar 语义的）语法树根节点的类型必须为 MSTART
     REQ(n, MSTART);
 
     // 遍历子节点
@@ -172,34 +184,55 @@ metacompile(node *n)
     for (; --i >= 0; n++) {
 
         // 对于非空行
+        // + 也就是 meta grammar 的 RULE
         if (n->n_type != NEWLINE)
             compile_rule(gr, n);
     }
     return gr;
 }
 
+// 编译 `RULE` 项
 static void
 compile_rule(nfagrammar *gr, node *n)
-{
+{   // @ metacompile
+
     nfa *nf;
 
+    // 验证节点类型为 `RULE`
     REQ(n, RULE);
+    // 验证 n_nchildren >= 4
     REQN(n->n_nchildren, 4);
+
+    // 获取第 1 个节点 `NAME`
     n = n->n_child;
     REQ(n, NAME);
+
+    // 创建（添加）nfa 节点
     nf = addnfa(gr, n->n_str);
     n++;
+
+    // 验证第 2 个节点类型为 `:`
     REQ(n, COLON);
     n++;
+
+    // 验证第 3 个节点类型为 `RHS`
     REQ(n, RHS);
+
+    // 编译 `RHS` 项
     compile_rhs(&gr->gr_ll, nf, n, &nf->nf_start, &nf->nf_finish);
     n++;
+
+    // 验证第 4 个节点类型为 `RHS`
     REQ(n, NEWLINE);
 }
 
+// 编译 `RHS` 项
 static void
 compile_rhs(labellist *ll, nfa *nf, node *n, int *pa, int *pb)
-{
+{   // @ compile_rule
+    // @ compile_item
+    // @ compile_atom
+
     int i;
     int a, b;
 
@@ -230,9 +263,11 @@ compile_rhs(labellist *ll, nfa *nf, node *n, int *pa, int *pb)
     }
 }
 
+// 编译 `ALT` 项
 static void
 compile_alt(labellist *ll, nfa *nf, node *n, int *pa, int *pb)
-{
+{   // @ compile_rhs
+
     int i;
     int a, b;
 
@@ -252,9 +287,11 @@ compile_alt(labellist *ll, nfa *nf, node *n, int *pa, int *pb)
     }
 }
 
+// 编译 `ITEM` 项
 static void
 compile_item(labellist *ll, nfa *nf, node *n, int *pa, int *pb)
-{
+{   // @ compile_alt
+
     int i;
     int a, b;
 
@@ -289,9 +326,11 @@ compile_item(labellist *ll, nfa *nf, node *n, int *pa, int *pb)
     }
 }
 
+// 编译 `ATOM` 项
 static void
 compile_atom(labellist *ll, nfa *nf, node *n, int *pa, int *pb)
-{
+{   // @ compile_item
+
     int i;
 
     REQ(n, ATOM);
@@ -315,9 +354,12 @@ compile_atom(labellist *ll, nfa *nf, node *n, int *pa, int *pb)
         REQ(n, NAME);
 }
 
+//-----------------------------------------------------------------------------
+
 static void
 dumpstate(labellist *ll, nfa *nf, int istate)
-{
+{   // @ dumpnfa
+
     nfastate *st;
     int i;
     nfaarc *ar;
@@ -340,7 +382,8 @@ dumpstate(labellist *ll, nfa *nf, int istate)
 
 static void
 dumpnfa(labellist *ll, nfa *nf)
-{
+{   // @ maketables
+
     int i;
 
     printf("NFA '%s' has %d states; start %d, finish %d\n",
@@ -349,6 +392,7 @@ dumpnfa(labellist *ll, nfa *nf)
         dumpstate(ll, nf, i);
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
 /* PART TWO -- CONSTRUCT DFA -- Algorithm 3.1 from [Aho&Ullman 77] */
 // 第二部分：确定有限自动机(Deterministic Finite Automaton) 
@@ -659,17 +703,21 @@ maketables(nfagrammar *gr)
 
     if (gr->gr_nnfas == 0)
         return NULL;
+
     g = newgrammar(gr->gr_nfa[0]->nf_type);
-                    /* XXX first rule must be start rule */
+
+    /* XXX first rule must be start rule */
     g->g_ll = gr->gr_ll;
 
     for (i = 0; i < gr->gr_nnfas; i++) {
         nf = gr->gr_nfa[i];
+
         if (Py_DebugFlag) {
             printf("Dump of NFA for '%s' ...\n", nf->nf_name);
             dumpnfa(&gr->gr_ll, nf);
             printf("Making DFA for '%s' ...\n", nf->nf_name);
         }
+
         d = adddfa(g, nf->nf_type, nf->nf_name);
         makedfa(gr, gr->gr_nfa[i], d);
     }
@@ -677,21 +725,30 @@ maketables(nfagrammar *gr)
     return g;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 grammar *
 pgen(node *n)
 {
     nfagrammar *gr;
     grammar *g;
 
-    // 编译语法树
+    // 编译（基于 meta grammar 语义的）Python 语言语法树
+    // + 生成基于 nfa 算法的语义树
     gr = metacompile(n);
 
-
+    // 将 nfa 转换为 dfa
     g = maketables(gr);
+
+    // 对 nfa 进行 ..
     translatelabels(g);
+
+    // 对 nfa 进行 ..
     addfirstsets(g);
 
+    // 删除是否 nfa（中间变量）
     PyObject_FREE(gr);
+    
     return g;
 }
 

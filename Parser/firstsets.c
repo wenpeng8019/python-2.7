@@ -18,8 +18,10 @@ addfirstsets(grammar *g)
 
     if (Py_DebugFlag)
         printf("Adding FIRST sets ...\n");
+
     for (i = 0; i < g->g_ndfas; i++) {
         d = &g->g_dfa[i];
+        
         if (d->d_first == NULL)
             calcfirstset(g, d);
     }
