@@ -72,7 +72,9 @@ extern "C" {
 
 #define NT_OFFSET		    256
 
+// 语义节点是叶节点（不含有子语义）
 #define ISTERMINAL(x)		((x) < NT_OFFSET)
+// 语义节点不是叶节点（含有子语义）
 #define ISNONTERMINAL(x)	((x) >= NT_OFFSET)
 #define ISEOF(x)		    ((x) == ENDMARKER)
 

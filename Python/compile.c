@@ -53,28 +53,45 @@ struct instr {
     int i_lineno;
 };
 
+// 代码块结构
 typedef struct basicblock_ {
+
     /* Each basicblock in a compilation unit is linked via b_list in the
        reverse order that the block are allocated.  b_list points to the next
        block, not to be confused with b_next, which is next by control flow. */
+    // 构成 basicblock 链的 next 指针
     struct basicblock_ *b_list;
+
+
+    /// instructions 队列
     /* number of instructions used */
     int b_iused;
     /* length of instruction array (b_instr) */
     int b_ialloc;
     /* pointer to an array of instructions, initially NULL */
     struct instr *b_instr;
+
+    
     /* If b_next is non-NULL, it is a pointer to the next
        block reached by normal control flow. */
+    // 指向控制流程图的下一项
     struct basicblock_ *b_next;
+
     /* b_seen is used to perform a DFS of basicblocks. */
+    // 用于深度优先遍历算法（Depth-First-Search）
     unsigned b_seen : 1;
+
     /* b_return is true if a RETURN_VALUE opcode is inserted. */
     unsigned b_return : 1;
+
     /* depth of stack upon entry of block, computed by stackdepth() */
+    // 栈偏移地址
     int b_startdepth;
+
     /* instruction offset for block, computed by assemble_jump_offsets() */
+    // 代码偏移地址
     int b_offset;
+
 } basicblock;
 
 /* fblockinfo tracks the current frame block.
@@ -183,6 +200,8 @@ static PyObject *__doc__;
 
 #define COMPILER_CAPSULE_NAME_COMPILER_UNIT "compile.c compiler unit"
 
+///////////////////////////////////////////////////////////////////////////////
+
 PyObject *
 _Py_Mangle(PyObject *privateobj, PyObject *ident)
 {
@@ -235,9 +254,13 @@ _Py_Mangle(PyObject *privateobj, PyObject *ident)
     return ident;
 }
 
+
+///////////////////////////////////////////////////////////////////////////////
+
 static int
 compiler_init(struct compiler *c)
-{
+{   // @ PyAST_Compile
+
     memset(c, 0, sizeof(struct compiler));
 
     c->c_stack = PyList_New(0);
@@ -263,6 +286,7 @@ PyAST_Compile(mod_ty mod, const char *filename, PyCompilerFlags *flags,
     PyCompilerFlags local_flags;
     int merged;
 
+    // 初始化静态常量字符串 "__doc__"
     if (!__doc__) {
         __doc__ = PyString_InternFromString("__doc__");
         if (!__doc__)
@@ -271,6 +295,7 @@ PyAST_Compile(mod_ty mod, const char *filename, PyCompilerFlags *flags,
 
     if (!compiler_init(&c))
         return NULL;
+
     c.c_filename = filename;
     c.c_arena = arena;
     c.c_future = PyFuture_FromAST(mod, filename);
@@ -286,6 +311,7 @@ PyAST_Compile(mod_ty mod, const char *filename, PyCompilerFlags *flags,
     c.c_flags = flags;
     c.c_nestlevel = 0;
 
+    // 构建符号表
     c.c_st = PySymtable_Build(mod, filename, c.c_future);
     if (c.c_st == NULL) {
         if (!PyErr_Occurred())
@@ -293,6 +319,7 @@ PyAST_Compile(mod_ty mod, const char *filename, PyCompilerFlags *flags,
         goto finally;
     }
 
+    // 对 AST 进行编译
     co = compiler_mod(&c, mod);
 
  finally:
@@ -301,6 +328,7 @@ PyAST_Compile(mod_ty mod, const char *filename, PyCompilerFlags *flags,
     return co;
 }
 
+// 编译 CST
 PyCodeObject *
 PyNode_Compile(struct _node *n, const char *filename)
 {
@@ -309,9 +337,14 @@ PyNode_Compile(struct _node *n, const char *filename)
     PyArena *arena = PyArena_New();
     if (!arena)
         return NULL;
+
+    // 将 CST 转换为 AST
     mod = PyAST_FromNode(n, NULL, filename, arena);
+    
+    // 对 AST 进行编译
     if (mod)
         co = PyAST_Compile(mod, filename, NULL, arena);
+
     PyArena_Free(arena);
     return co;
 }
@@ -326,9 +359,13 @@ compiler_free(struct compiler *c)
     Py_DECREF(c->c_stack);
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
+
 static PyObject *
 list2dict(PyObject *list)
-{
+{   // @ compiler_enter_scope
+
     Py_ssize_t i, n;
     PyObject *v, *k;
     PyObject *dict = PyDict_New();
@@ -365,7 +402,8 @@ each key.
 
 static PyObject *
 dictbytype(PyObject *src, int scope_type, int flag, int offset)
-{
+{   // @ compiler_enter_scope
+
     Py_ssize_t pos = 0, i = offset, scope;
     PyObject *k, *v, *dest = PyDict_New();
 
@@ -401,7 +439,9 @@ dictbytype(PyObject *src, int scope_type, int flag, int offset)
 
 static void
 compiler_unit_check(struct compiler_unit *u)
-{
+{   // @ compiler_exit_scope
+    // @ compiler_unit_free
+
     basicblock *block;
     for (block = u->u_blocks; block != NULL; block = block->b_list) {
         assert((void *)block != (void *)0xcbcbcbcb);
@@ -421,7 +461,8 @@ compiler_unit_check(struct compiler_unit *u)
 
 static void
 compiler_unit_free(struct compiler_unit *u)
-{
+{   // @ compiler_exit_scope
+
     basicblock *b, *next;
 
     compiler_unit_check(u);
@@ -542,6 +583,8 @@ compiler_exit_scope(struct compiler *c)
 
 }
 
+//-----------------------------------------------------------------------------
+
 /* Allocate a new block and return a pointer to it.
    Returns NULL on error.
 */
@@ -586,6 +629,7 @@ compiler_next_block(struct compiler *c)
     return block;
 }
 
+// 将指定的 block 作为当前 baseblock 的控制流程图的下一项
 static basicblock *
 compiler_use_next_block(struct compiler *c, basicblock *block)
 {
@@ -595,29 +639,47 @@ compiler_use_next_block(struct compiler *c, basicblock *block)
     return block;
 }
 
+/* The distinction between NEW_BLOCK and NEXT_BLOCK is subtle.  (I'd
+   like to find better names.)  NEW_BLOCK() creates a new block and sets
+   it as the current block.  NEXT_BLOCK() also creates an implicit jump
+   from the current block to the new block.
+*/
+
+#define NEW_BLOCK(C) { \
+    if (compiler_use_new_block((C)) == NULL) \
+        return 0; \
+}
+
+#define NEXT_BLOCK(C) { \
+    if (compiler_next_block((C)) == NULL) \
+        return 0; \
+}
+
 /* Returns the offset of the next instruction in the current block's
    b_instr array.  Resizes the b_instr as necessary.
    Returns -1 on failure.
 */
-
+// 获取下一个新指令的插入位置
+// + 也就是指令队列的末尾，同时如果队列满了会自动重分配内存
 static int
 compiler_next_instr(struct compiler *c, basicblock *b)
 {
     assert(b != NULL);
     if (b->b_instr == NULL) {
-        b->b_instr = (struct instr *)PyObject_Malloc(
-                         sizeof(struct instr) * DEFAULT_BLOCK_SIZE);
+        
+        b->b_instr = (struct instr *)PyObject_Malloc(sizeof(struct instr) * DEFAULT_BLOCK_SIZE);
         if (b->b_instr == NULL) {
             PyErr_NoMemory();
             return -1;
         }
+
         b->b_ialloc = DEFAULT_BLOCK_SIZE;
-        memset((char *)b->b_instr, 0,
-               sizeof(struct instr) * DEFAULT_BLOCK_SIZE);
+        memset((char *)b->b_instr, 0, sizeof(struct instr) * DEFAULT_BLOCK_SIZE);
     }
     else if (b->b_iused == b->b_ialloc) {
         struct instr *tmp;
         size_t oldsize, newsize;
+        
         oldsize = b->b_ialloc * sizeof(struct instr);
         newsize = oldsize << 1;
 
@@ -630,9 +692,9 @@ compiler_next_instr(struct compiler *c, basicblock *b)
             PyErr_NoMemory();
             return -1;
         }
+        
         b->b_ialloc <<= 1;
-        tmp = (struct instr *)PyObject_Realloc(
-                                        (void *)b->b_instr, newsize);
+        tmp = (struct instr *)PyObject_Realloc((void *)b->b_instr, newsize);
         if (tmp == NULL) {
             PyErr_NoMemory();
             return -1;
@@ -642,6 +704,8 @@ compiler_next_instr(struct compiler *c, basicblock *b)
     }
     return b->b_iused++;
 }
+
+//-----------------------------------------------------------------------------
 
 /* Set the i_lineno member of the instruction at offset off if the
    line number for the current expression/statement has not
@@ -661,11 +725,13 @@ compiler_set_lineno(struct compiler *c, int off)
     basicblock *b;
     if (c->u->u_lineno_set)
         return;
+
     c->u->u_lineno_set = true;
     b = c->u->u_curblock;
     b->b_instr[off].i_lineno = c->u->u_lineno;
 }
 
+// 设置不同操作对应的栈变化量
 static int
 opcode_stack_effect(int opcode, int oparg)
 {
@@ -900,27 +966,111 @@ opcode_stack_effect(int opcode, int oparg)
     return 0; /* not reachable */
 }
 
+//-----------------------------------------------------------------------------
+
 /* Add an opcode with no argument.
    Returns 0 on failure, 1 on success.
 */
 
+// 添加指令：无参
 static int
 compiler_addop(struct compiler *c, int opcode)
 {
     basicblock *b;
     struct instr *i;
     int off;
+
+    // 获取指令偏移地址
     off = compiler_next_instr(c, c->u->u_curblock);
     if (off < 0)
         return 0;
+    // 获取指定对象
     b = c->u->u_curblock;
     i = &b->b_instr[off];
+
+    // 设置指令
     i->i_opcode = opcode;
     i->i_hasarg = 0;
     if (opcode == RETURN_VALUE)
         b->b_return = 1;
+
     compiler_set_lineno(c, off);
     return 1;
+}
+
+#define ADDOP(C, OP) { \
+    if (!compiler_addop((C), (OP))) \
+        return 0; \
+}
+
+#define ADDOP_IN_SCOPE(C, OP) { \
+    if (!compiler_addop((C), (OP))) { \
+        compiler_exit_scope(c); \
+        return 0; \
+    } \
+}
+
+/* Add an opcode with an integer argument.
+   Returns 0 on failure, 1 on success.
+*/
+// 添加指令：只有一个整型参数
+static int
+compiler_addop_i(struct compiler *c, int opcode, int oparg)
+{
+    struct instr *i;
+    int off;
+
+    off = compiler_next_instr(c, c->u->u_curblock);
+    if (off < 0)
+        return 0;
+    i = &c->u->u_curblock->b_instr[off];
+
+    i->i_opcode = opcode;
+    i->i_oparg = oparg;
+    i->i_hasarg = 1;
+
+    compiler_set_lineno(c, off);
+    return 1;
+}
+
+#define ADDOP_I(C, OP, O) { \
+    if (!compiler_addop_i((C), (OP), (O))) \
+        return 0; \
+}
+
+// 添加指令：? 执行/跳转 另一个代码块 ？
+static int
+compiler_addop_j(struct compiler *c, int opcode, basicblock *b, int absolute)
+{
+    struct instr *i;
+    int off;
+
+    assert(b != NULL);
+    off = compiler_next_instr(c, c->u->u_curblock);
+    if (off < 0)
+        return 0;
+    i = &c->u->u_curblock->b_instr[off];
+
+    i->i_opcode = opcode;
+    i->i_target = b;
+    i->i_hasarg = 1;
+    if (absolute)
+        i->i_jabs = 1;
+    else
+        i->i_jrel = 1;
+        
+    compiler_set_lineno(c, off);
+    return 1;
+}
+
+#define ADDOP_JABS(C, OP, O) { \
+    if (!compiler_addop_j((C), (OP), (O), 1)) \
+        return 0; \
+}
+
+#define ADDOP_JREL(C, OP, O) { \
+    if (!compiler_addop_j((C), (OP), (O), 0)) \
+        return 0; \
 }
 
 static int
@@ -933,6 +1083,7 @@ compiler_add_o(struct compiler *c, PyObject *dict, PyObject *o)
     /* necessary to make sure types aren't coerced (e.g., int and long) */
     /* _and_ to distinguish 0.0 from -0.0 e.g. on IEEE platforms */
     if (PyFloat_Check(o)) {
+
         d = PyFloat_AS_DOUBLE(o);
         /* all we need is to make the tuple different in either the 0.0
          * or -0.0 case from all others, just to avoid the "coercion".
@@ -942,6 +1093,7 @@ compiler_add_o(struct compiler *c, PyObject *dict, PyObject *o)
         else
             t = PyTuple_Pack(2, o, o->ob_type);
     }
+
 #ifndef WITHOUT_COMPLEX
     else if (PyComplex_Check(o)) {
         Py_complex z;
@@ -968,6 +1120,7 @@ compiler_add_o(struct compiler *c, PyObject *dict, PyObject *o)
         }
     }
 #endif /* WITHOUT_COMPLEX */
+
     else {
         t = PyTuple_Pack(2, o, o->ob_type);
     }
@@ -996,103 +1149,13 @@ compiler_add_o(struct compiler *c, PyObject *dict, PyObject *o)
 }
 
 static int
-compiler_addop_o(struct compiler *c, int opcode, PyObject *dict,
-                     PyObject *o)
+compiler_addop_o(struct compiler *c, int opcode, PyObject *dict, PyObject *o)
 {
     int arg = compiler_add_o(c, dict, o);
     if (arg < 0)
         return 0;
+
     return compiler_addop_i(c, opcode, arg);
-}
-
-static int
-compiler_addop_name(struct compiler *c, int opcode, PyObject *dict,
-                    PyObject *o)
-{
-    int arg;
-    PyObject *mangled = _Py_Mangle(c->u->u_private, o);
-    if (!mangled)
-        return 0;
-    arg = compiler_add_o(c, dict, mangled);
-    Py_DECREF(mangled);
-    if (arg < 0)
-        return 0;
-    return compiler_addop_i(c, opcode, arg);
-}
-
-/* Add an opcode with an integer argument.
-   Returns 0 on failure, 1 on success.
-*/
-
-static int
-compiler_addop_i(struct compiler *c, int opcode, int oparg)
-{
-    struct instr *i;
-    int off;
-    off = compiler_next_instr(c, c->u->u_curblock);
-    if (off < 0)
-        return 0;
-    i = &c->u->u_curblock->b_instr[off];
-    i->i_opcode = opcode;
-    i->i_oparg = oparg;
-    i->i_hasarg = 1;
-    compiler_set_lineno(c, off);
-    return 1;
-}
-
-static int
-compiler_addop_j(struct compiler *c, int opcode, basicblock *b, int absolute)
-{
-    struct instr *i;
-    int off;
-
-    assert(b != NULL);
-    off = compiler_next_instr(c, c->u->u_curblock);
-    if (off < 0)
-        return 0;
-    i = &c->u->u_curblock->b_instr[off];
-    i->i_opcode = opcode;
-    i->i_target = b;
-    i->i_hasarg = 1;
-    if (absolute)
-        i->i_jabs = 1;
-    else
-        i->i_jrel = 1;
-    compiler_set_lineno(c, off);
-    return 1;
-}
-
-/* The distinction between NEW_BLOCK and NEXT_BLOCK is subtle.  (I'd
-   like to find better names.)  NEW_BLOCK() creates a new block and sets
-   it as the current block.  NEXT_BLOCK() also creates an implicit jump
-   from the current block to the new block.
-*/
-
-/* The returns inside these macros make it impossible to decref objects
-   created in the local function.  Local objects should use the arena.
-*/
-
-
-#define NEW_BLOCK(C) { \
-    if (compiler_use_new_block((C)) == NULL) \
-        return 0; \
-}
-
-#define NEXT_BLOCK(C) { \
-    if (compiler_next_block((C)) == NULL) \
-        return 0; \
-}
-
-#define ADDOP(C, OP) { \
-    if (!compiler_addop((C), (OP))) \
-        return 0; \
-}
-
-#define ADDOP_IN_SCOPE(C, OP) { \
-    if (!compiler_addop((C), (OP))) { \
-        compiler_exit_scope(c); \
-        return 0; \
-    } \
 }
 
 #define ADDOP_O(C, OP, O, TYPE) { \
@@ -1100,25 +1163,38 @@ compiler_addop_j(struct compiler *c, int opcode, basicblock *b, int absolute)
         return 0; \
 }
 
+static int
+compiler_addop_name(struct compiler *c, int opcode, PyObject *dict, PyObject *o)
+{
+    int arg;
+    PyObject *mangled = _Py_Mangle(c->u->u_private, o);
+    if (!mangled)
+        return 0;
+
+    arg = compiler_add_o(c, dict, mangled);
+    Py_DECREF(mangled);
+    if (arg < 0)
+        return 0;
+
+    return compiler_addop_i(c, opcode, arg);
+}
+
 #define ADDOP_NAME(C, OP, O, TYPE) { \
     if (!compiler_addop_name((C), (OP), (C)->u->u_ ## TYPE, (O))) \
         return 0; \
 }
 
-#define ADDOP_I(C, OP, O) { \
-    if (!compiler_addop_i((C), (OP), (O))) \
-        return 0; \
-}
+//-----------------------------------------------------------------------------
 
-#define ADDOP_JABS(C, OP, O) { \
-    if (!compiler_addop_j((C), (OP), (O), 1)) \
-        return 0; \
-}
+/* The returns inside these macros make it impossible to decref objects
+   created in the local function.  Local objects should use the arena.
+*/
 
-#define ADDOP_JREL(C, OP, O) { \
-    if (!compiler_addop_j((C), (OP), (O), 0)) \
-        return 0; \
-}
+// static int compiler_visit_stmt(struct compiler *, stmt_ty);
+// static int compiler_visit_keyword(struct compiler *, keyword_ty);
+// static int compiler_visit_expr(struct compiler *, expr_ty);
+// 相应的，VISIT 宏的第二个参数可以是: stmt、keyword、expr
+
 
 /* VISIT and VISIT_SEQ takes an ASDL type as their second argument.  They use
    the ASDL name to synthesize the name of the C type and the visit function.
@@ -1134,11 +1210,6 @@ compiler_addop_j(struct compiler *c, int opcode, basicblock *b, int absolute)
         compiler_exit_scope(c); \
         return 0; \
     } \
-}
-
-#define VISIT_SLICE(C, V, CTX) {\
-    if (!compiler_visit_slice((C), (V), (CTX))) \
-        return 0; \
 }
 
 #define VISIT_SEQ(C, TYPE, SEQ) { \
@@ -1163,11 +1234,19 @@ compiler_addop_j(struct compiler *c, int opcode, basicblock *b, int absolute)
     } \
 }
 
+#define VISIT_SLICE(C, V, CTX) {\
+    if (!compiler_visit_slice((C), (V), (CTX))) \
+        return 0; \
+}
+
+//-----------------------------------------------------------------------------
+
 static int
 compiler_isdocstring(stmt_ty s)
 {
     if (s->kind != Expr_kind)
         return 0;
+
     return s->v.Expr.value->kind == Str_kind;
 }
 
@@ -1325,6 +1404,8 @@ compiler_make_closure(struct compiler *c, PyCodeObject *co, int args)
     ADDOP_I(c, MAKE_CLOSURE, args);
     return 1;
 }
+
+//-----------------------------------------------------------------------------
 
 static int
 compiler_decorators(struct compiler *c, asdl_seq* decos)
@@ -1484,6 +1565,8 @@ compiler_class(struct compiler *c, stmt_ty s)
     return 1;
 }
 
+//-----------------------------------------------------------------------------
+
 static int
 compiler_ifexp(struct compiler *c, expr_ty e)
 {
@@ -1496,12 +1579,24 @@ compiler_ifexp(struct compiler *c, expr_ty e)
     next = compiler_new_block(c);
     if (next == NULL)
         return 0;
+
+    // （构建）执行判断表达式
     VISIT(c, expr, e->v.IfExp.test);
+
+    // 如果（POP）结果为 false，则跳转到 else 分支代码块
     ADDOP_JABS(c, POP_JUMP_IF_FALSE, next);
+
+    //（POP）结果为 true 时，继续（构建）执行 if 分支代码块
     VISIT(c, expr, e->v.IfExp.body);
+    //（构建）执行 else 分支代码块
     ADDOP_JREL(c, JUMP_FORWARD, end);
+
+    // 切换到 else 分支代码块
     compiler_use_next_block(c, next);
+    //（构建）执行 else 分支代码块
     VISIT(c, expr, e->v.IfExp.orelse);
+
+    // 切换到 if ... else ... 完成后的代码块
     compiler_use_next_block(c, end);
     return 1;
 }
@@ -1552,42 +1647,7 @@ compiler_lambda(struct compiler *c, expr_ty e)
     return 1;
 }
 
-static int
-compiler_print(struct compiler *c, stmt_ty s)
-{
-    int i, n;
-    bool dest;
-
-    assert(s->kind == Print_kind);
-    n = asdl_seq_LEN(s->v.Print.values);
-    dest = false;
-    if (s->v.Print.dest) {
-        VISIT(c, expr, s->v.Print.dest);
-        dest = true;
-    }
-    for (i = 0; i < n; i++) {
-        expr_ty e = (expr_ty)asdl_seq_GET(s->v.Print.values, i);
-        if (dest) {
-            ADDOP(c, DUP_TOP);
-            VISIT(c, expr, e);
-            ADDOP(c, ROT_TWO);
-            ADDOP(c, PRINT_ITEM_TO);
-        }
-        else {
-            VISIT(c, expr, e);
-            ADDOP(c, PRINT_ITEM);
-        }
-    }
-    if (s->v.Print.nl) {
-        if (dest)
-            ADDOP(c, PRINT_NEWLINE_TO)
-        else
-            ADDOP(c, PRINT_NEWLINE)
-    }
-    else if (dest)
-        ADDOP(c, POP_TOP);
-    return 1;
-}
+//-----------------------------------------------------------------------------
 
 static int
 compiler_if(struct compiler *c, stmt_ty s)
@@ -1595,6 +1655,8 @@ compiler_if(struct compiler *c, stmt_ty s)
     basicblock *end, *next;
     int constant;
     assert(s->kind == If_kind);
+
+    // 创建 if ... else ... 完成后的代码块
     end = compiler_new_block(c);
     if (end == NULL)
         return 0;
@@ -1609,6 +1671,9 @@ compiler_if(struct compiler *c, stmt_ty s)
     } else if (constant == 1) {
         VISIT_SEQ(c, stmt, s->v.If.body);
     } else {
+
+        // 如果存在 else 分支
+        // + 创建 else 分支代码块
         if (s->v.If.orelse) {
             next = compiler_new_block(c);
             if (next == NULL)
@@ -1616,15 +1681,27 @@ compiler_if(struct compiler *c, stmt_ty s)
         }
         else
             next = end;
+
+        // （构建）执行判断表达式
         VISIT(c, expr, s->v.If.test);
+
+        // 如果（POP）结果为 false，则跳转到 else 分支代码块
         ADDOP_JABS(c, POP_JUMP_IF_FALSE, next);
+        
+        //（POP）结果为 true 时，继续（构建）执行 if 分支代码块
         VISIT_SEQ(c, stmt, s->v.If.body);
+        // 跳过 else 分支代码块
         ADDOP_JREL(c, JUMP_FORWARD, end);
+
         if (s->v.If.orelse) {
+            // 切换到 else 分支代码块
             compiler_use_next_block(c, next);
+            //（构建）执行 else 分支代码块
             VISIT_SEQ(c, stmt, s->v.If.orelse);
         }
     }
+
+    // 切换到 if ... else ... 完成后的代码块
     compiler_use_next_block(c, end);
     return 1;
 }
@@ -1639,21 +1716,32 @@ compiler_for(struct compiler *c, stmt_ty s)
     end = compiler_new_block(c);
     if (start == NULL || end == NULL || cleanup == NULL)
         return 0;
+
     ADDOP_JREL(c, SETUP_LOOP, end);
+
     if (!compiler_push_fblock(c, LOOP, start))
         return 0;
+
     VISIT(c, expr, s->v.For.iter);
     ADDOP(c, GET_ITER);
+
     compiler_use_next_block(c, start);
     ADDOP_JREL(c, FOR_ITER, cleanup);
+
     VISIT(c, expr, s->v.For.target);
+
     VISIT_SEQ(c, stmt, s->v.For.body);
     ADDOP_JABS(c, JUMP_ABSOLUTE, start);
+
     compiler_use_next_block(c, cleanup);
     ADDOP(c, POP_BLOCK);
+
     compiler_pop_fblock(c, LOOP, start);
+
     VISIT_SEQ(c, stmt, s->v.For.orelse);
+
     compiler_use_next_block(c, end);
+
     return 1;
 }
 
@@ -1668,7 +1756,10 @@ compiler_while(struct compiler *c, stmt_ty s)
             VISIT_SEQ(c, stmt, s->v.While.orelse);
         return 1;
     }
+
+    // 循环体代码块
     loop = compiler_new_block(c);
+    // 循环结束后对代码块
     end = compiler_new_block(c);
     if (constant == -1) {
         anchor = compiler_new_block(c);
@@ -1677,6 +1768,7 @@ compiler_while(struct compiler *c, stmt_ty s)
     }
     if (loop == NULL || end == NULL)
         return 0;
+
     if (s->v.While.orelse) {
         orelse = compiler_new_block(c);
         if (orelse == NULL)
@@ -1685,15 +1777,26 @@ compiler_while(struct compiler *c, stmt_ty s)
     else
         orelse = NULL;
 
+    // 设置
     ADDOP_JREL(c, SETUP_LOOP, end);
+
+    // 切换到循环体代码块
     compiler_use_next_block(c, loop);
+
+    // 当前 loop 代码块入栈（记录）    
     if (!compiler_push_fblock(c, LOOP, loop))
         return 0;
+    
+    // 执行 while 条件判断
     if (constant == -1) {
         VISIT(c, expr, s->v.While.test);
         ADDOP_JABS(c, POP_JUMP_IF_FALSE, anchor);
     }
+
+    // 编译循环体代码
     VISIT_SEQ(c, stmt, s->v.While.body);
+
+    // 跳回到自己的入口（循环）
     ADDOP_JABS(c, JUMP_ABSOLUTE, loop);
 
     /* XXX should the two POP instructions be in a separate block
@@ -1702,11 +1805,17 @@ compiler_while(struct compiler *c, stmt_ty s)
 
     if (constant == -1) {
         compiler_use_next_block(c, anchor);
+        // 只构造一条指令：即直接退出
         ADDOP(c, POP_BLOCK);
     }
+
+    // 当前 loop 代码块出栈（恢复）    
     compiler_pop_fblock(c, LOOP, loop);
+
     if (orelse != NULL) /* what if orelse is just pass? */
         VISIT_SEQ(c, stmt, s->v.While.orelse);
+
+    // 切换为 while 结束后的代码块
     compiler_use_next_block(c, end);
 
     return 1;
@@ -1895,6 +2004,92 @@ compiler_try_except(struct compiler *c, stmt_ty s)
     return 1;
 }
 
+//-----------------------------------------------------------------------------
+
+static int
+compiler_assert(struct compiler *c, stmt_ty s)
+{
+    static PyObject *assertion_error = NULL;
+    basicblock *end;
+
+    if (Py_OptimizeFlag)
+        return 1;
+    if (assertion_error == NULL) {
+        assertion_error = PyString_InternFromString("AssertionError");
+        if (assertion_error == NULL)
+            return 0;
+    }
+    if (s->v.Assert.test->kind == Tuple_kind &&
+        asdl_seq_LEN(s->v.Assert.test->v.Tuple.elts) > 0) {
+        const char* msg =
+            "assertion is always true, perhaps remove parentheses?";
+        if (PyErr_WarnExplicit(PyExc_SyntaxWarning, msg, c->c_filename,
+                               c->u->u_lineno, NULL, NULL) == -1)
+            return 0;
+    }
+    VISIT(c, expr, s->v.Assert.test);
+    end = compiler_new_block(c);
+    if (end == NULL)
+        return 0;
+    ADDOP_JABS(c, POP_JUMP_IF_TRUE, end);
+    ADDOP_O(c, LOAD_GLOBAL, assertion_error, names);
+    if (s->v.Assert.msg) {
+        VISIT(c, expr, s->v.Assert.msg);
+        ADDOP_I(c, CALL_FUNCTION, 1);
+    }
+    ADDOP_I(c, RAISE_VARARGS, 1);
+    compiler_use_next_block(c, end);
+    return 1;
+}
+
+static int
+compiler_print(struct compiler *c, stmt_ty s)
+{
+    int i, n;
+    bool dest;
+
+    assert(s->kind == Print_kind);
+    
+    n = asdl_seq_LEN(s->v.Print.values);
+    // 默认输出到 stdout
+    dest = false;
+    // 需要输出到指定位置
+    if (s->v.Print.dest) {
+        VISIT(c, expr, s->v.Print.dest);
+        dest = true;
+    }
+
+    // 变量要输出的项
+    for (i = 0; i < n; i++) {
+        expr_ty e = (expr_ty)asdl_seq_GET(s->v.Print.values, i);
+
+        if (dest) {
+            ADDOP(c, DUP_TOP);
+            VISIT(c, expr, e);
+            ADDOP(c, ROT_TWO);
+            ADDOP(c, PRINT_ITEM_TO);
+        }
+        else {
+            VISIT(c, expr, e);
+            ADDOP(c, PRINT_ITEM);
+        }
+    }
+
+    // 如果需要输出换行符
+    if (s->v.Print.nl) {
+        if (dest)
+            ADDOP(c, PRINT_NEWLINE_TO)
+        else
+            ADDOP(c, PRINT_NEWLINE)
+    }
+    else if (dest)
+        ADDOP(c, POP_TOP);
+
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+
 static int
 compiler_import_as(struct compiler *c, identifier name, identifier asname)
 {
@@ -2057,41 +2252,7 @@ compiler_from_import(struct compiler *c, stmt_ty s)
     return 1;
 }
 
-static int
-compiler_assert(struct compiler *c, stmt_ty s)
-{
-    static PyObject *assertion_error = NULL;
-    basicblock *end;
-
-    if (Py_OptimizeFlag)
-        return 1;
-    if (assertion_error == NULL) {
-        assertion_error = PyString_InternFromString("AssertionError");
-        if (assertion_error == NULL)
-            return 0;
-    }
-    if (s->v.Assert.test->kind == Tuple_kind &&
-        asdl_seq_LEN(s->v.Assert.test->v.Tuple.elts) > 0) {
-        const char* msg =
-            "assertion is always true, perhaps remove parentheses?";
-        if (PyErr_WarnExplicit(PyExc_SyntaxWarning, msg, c->c_filename,
-                               c->u->u_lineno, NULL, NULL) == -1)
-            return 0;
-    }
-    VISIT(c, expr, s->v.Assert.test);
-    end = compiler_new_block(c);
-    if (end == NULL)
-        return 0;
-    ADDOP_JABS(c, POP_JUMP_IF_TRUE, end);
-    ADDOP_O(c, LOAD_GLOBAL, assertion_error, names);
-    if (s->v.Assert.msg) {
-        VISIT(c, expr, s->v.Assert.msg);
-        ADDOP_I(c, CALL_FUNCTION, 1);
-    }
-    ADDOP_I(c, RAISE_VARARGS, 1);
-    compiler_use_next_block(c, end);
-    return 1;
-}
+//-----------------------------------------------------------------------------
 
 static int
 compiler_visit_stmt(struct compiler *c, stmt_ty s)
@@ -2104,30 +2265,37 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
 
     switch (s->kind) {
     case FunctionDef_kind:
+    // 函数定义
         return compiler_function(c, s);
     case ClassDef_kind:
+    // 类定义
         return compiler_class(c, s);
     case Return_kind:
+    // 返回语句
+
         if (c->u->u_ste->ste_type != FunctionBlock)
             return compiler_error(c, "'return' outside function");
+
         if (s->v.Return.value) {
             VISIT(c, expr, s->v.Return.value);
         }
         else
             ADDOP_O(c, LOAD_CONST, Py_None, consts);
+
         ADDOP(c, RETURN_VALUE);
         break;
     case Delete_kind:
+    // del 语句
         VISIT_SEQ(c, expr, s->v.Delete.targets)
         break;
     case Assign_kind:
+    // 赋值 语句
         n = asdl_seq_LEN(s->v.Assign.targets);
         VISIT(c, expr, s->v.Assign.value);
         for (i = 0; i < n; i++) {
             if (i < n - 1)
                 ADDOP(c, DUP_TOP);
-            VISIT(c, expr,
-                  (expr_ty)asdl_seq_GET(s->v.Assign.targets, i));
+            VISIT(c, expr, (expr_ty)asdl_seq_GET(s->v.Assign.targets, i));
         }
         break;
     case AugAssign_kind:
@@ -2141,6 +2309,7 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
     case If_kind:
         return compiler_if(c, s);
     case Raise_kind:
+    // 抛异常语句
         n = 0;
         if (s->v.Raise.type) {
             VISIT(c, expr, s->v.Raise.type);
@@ -2167,6 +2336,7 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
     case ImportFrom_kind:
         return compiler_from_import(c, s);
     case Exec_kind:
+    // exec 语句
         VISIT(c, expr, s->v.Exec.body);
         if (s->v.Exec.globals) {
             VISIT(c, expr, s->v.Exec.globals);
@@ -2209,18 +2379,21 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
     return 1;
 }
 
+//-----------------------------------------------------------------------------
+
+// 单目运算
 static int
 unaryop(unaryop_ty op)
 {
     switch (op) {
     case Invert:
-        return UNARY_INVERT;
+        return UNARY_INVERT;            /* ! */
     case Not:
-        return UNARY_NOT;
+        return UNARY_NOT;               /* ! */
     case UAdd:
-        return UNARY_POSITIVE;
+        return UNARY_POSITIVE;          /* - */
     case USub:
-        return UNARY_NEGATIVE;
+        return UNARY_NEGATIVE;          /* + */
     default:
         PyErr_Format(PyExc_SystemError,
             "unary op %d should not be possible", op);
@@ -2228,36 +2401,37 @@ unaryop(unaryop_ty op)
     }
 }
 
+// 双目运算
 static int
 binop(struct compiler *c, operator_ty op)
 {
     switch (op) {
-    case Add:
+    case Add:                           /* + */
         return BINARY_ADD;
-    case Sub:
+    case Sub:                           /* - */
         return BINARY_SUBTRACT;
-    case Mult:
-        return BINARY_MULTIPLY;
-    case Div:
+    case Mult:                          /* * */
+        return BINARY_MULTIPLY;         
+    case Div:                           /* / */
         if (c->c_flags && c->c_flags->cf_flags & CO_FUTURE_DIVISION)
             return BINARY_TRUE_DIVIDE;
         else
             return BINARY_DIVIDE;
-    case Mod:
+    case Mod:                           /* % */
         return BINARY_MODULO;
-    case Pow:
+    case Pow:                           /* ** */
         return BINARY_POWER;
-    case LShift:
+    case LShift:                        /* << */
         return BINARY_LSHIFT;
-    case RShift:
+    case RShift:                        /* >> */
         return BINARY_RSHIFT;
-    case BitOr:
+    case BitOr:                         /* | */
         return BINARY_OR;
-    case BitXor:
+    case BitXor:                        /* ^ */
         return BINARY_XOR;
-    case BitAnd:
-        return BINARY_AND;
-    case FloorDiv:
+    case BitAnd:                        /* & */
+        return BINARY_AND;              
+    case FloorDiv:                      /* // */
         return BINARY_FLOOR_DIVIDE;
     default:
         PyErr_Format(PyExc_SystemError,
@@ -2266,30 +2440,31 @@ binop(struct compiler *c, operator_ty op)
     }
 }
 
+// 比对运算
 static int
 cmpop(cmpop_ty op)
 {
     switch (op) {
     case Eq:
-        return PyCmp_EQ;
+        return PyCmp_EQ;            /* == */
     case NotEq:
-        return PyCmp_NE;
+        return PyCmp_NE;            /* != */
     case Lt:
-        return PyCmp_LT;
+        return PyCmp_LT;            /* < */
     case LtE:
-        return PyCmp_LE;
+        return PyCmp_LE;            /* <= */
     case Gt:
-        return PyCmp_GT;
+        return PyCmp_GT;            /* > */
     case GtE:
-        return PyCmp_GE;
+        return PyCmp_GE;            /* >= */
     case Is:
-        return PyCmp_IS;
+        return PyCmp_IS;            /* is */
     case IsNot:
-        return PyCmp_IS_NOT;
+        return PyCmp_IS_NOT;        /* is not */
     case In:
-        return PyCmp_IN;
+        return PyCmp_IN;            /* in */
     case NotIn:
-        return PyCmp_NOT_IN;
+        return PyCmp_NOT_IN;        /* not in */
     default:
         return PyCmp_BAD;
     }
@@ -2333,6 +2508,8 @@ inplace_binop(struct compiler *c, operator_ty op)
     }
 }
 
+// 命名访问操作
+// + 对 Python 而言，就是变量访问
 static int
 compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
 {
@@ -2458,6 +2635,51 @@ compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
     return compiler_addop_i(c, op, arg);
 }
 
+// 调用命令
+static int
+compiler_call(struct compiler *c, expr_ty e)
+{
+    int n, code = 0;
+
+    VISIT(c, expr, e->v.Call.func);
+    n = asdl_seq_LEN(e->v.Call.args);
+    VISIT_SEQ(c, expr, e->v.Call.args);
+
+    if (e->v.Call.keywords) {
+        VISIT_SEQ(c, keyword, e->v.Call.keywords);
+        n |= asdl_seq_LEN(e->v.Call.keywords) << 8;
+    }
+
+    if (e->v.Call.starargs) {
+        VISIT(c, expr, e->v.Call.starargs);
+        code |= 1;
+    }
+
+    if (e->v.Call.kwargs) {
+        VISIT(c, expr, e->v.Call.kwargs);
+        code |= 2;
+    }
+
+    switch (code) {
+    case 0:
+        ADDOP_I(c, CALL_FUNCTION, n);
+        break;
+    case 1:
+        ADDOP_I(c, CALL_FUNCTION_VAR, n);
+        break;
+    case 2:
+        ADDOP_I(c, CALL_FUNCTION_KW, n);
+        break;
+    case 3:
+        ADDOP_I(c, CALL_FUNCTION_VAR_KW, n);
+        break;
+    }
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+
+// 逻辑表达式
 static int
 compiler_boolop(struct compiler *c, expr_ty e)
 {
@@ -2473,6 +2695,7 @@ compiler_boolop(struct compiler *c, expr_ty e)
     end = compiler_new_block(c);
     if (end == NULL)
         return 0;
+
     s = e->v.BoolOp.values;
     n = asdl_seq_LEN(s) - 1;
     assert(n >= 0);
@@ -2554,43 +2777,6 @@ compiler_compare(struct compiler *c, expr_ty e)
         ADDOP(c, ROT_TWO);
         ADDOP(c, POP_TOP);
         compiler_use_next_block(c, end);
-    }
-    return 1;
-}
-
-static int
-compiler_call(struct compiler *c, expr_ty e)
-{
-    int n, code = 0;
-
-    VISIT(c, expr, e->v.Call.func);
-    n = asdl_seq_LEN(e->v.Call.args);
-    VISIT_SEQ(c, expr, e->v.Call.args);
-    if (e->v.Call.keywords) {
-        VISIT_SEQ(c, keyword, e->v.Call.keywords);
-        n |= asdl_seq_LEN(e->v.Call.keywords) << 8;
-    }
-    if (e->v.Call.starargs) {
-        VISIT(c, expr, e->v.Call.starargs);
-        code |= 1;
-    }
-    if (e->v.Call.kwargs) {
-        VISIT(c, expr, e->v.Call.kwargs);
-        code |= 2;
-    }
-    switch (code) {
-    case 0:
-        ADDOP_I(c, CALL_FUNCTION, n);
-        break;
-    case 1:
-        ADDOP_I(c, CALL_FUNCTION_VAR, n);
-        break;
-    case 2:
-        ADDOP_I(c, CALL_FUNCTION_KW, n);
-        break;
-    case 3:
-        ADDOP_I(c, CALL_FUNCTION_VAR_KW, n);
-        break;
     }
     return 1;
 }
@@ -2864,6 +3050,8 @@ compiler_dictcomp(struct compiler *c, expr_ty e)
                                   e->v.DictComp.key, e->v.DictComp.value);
 }
 
+//-----------------------------------------------------------------------------
+
 static int
 compiler_visit_keyword(struct compiler *c, keyword_ty k)
 {
@@ -2871,6 +3059,8 @@ compiler_visit_keyword(struct compiler *c, keyword_ty k)
     VISIT(c, expr, k->value);
     return 1;
 }
+
+//-----------------------------------------------------------------------------
 
 /* Test whether expression is constant.  For constants, report
    whether they are true or false.
@@ -2977,6 +3167,8 @@ compiler_with(struct compiler *c, stmt_ty s)
     return 1;
 }
 
+//-----------------------------------------------------------------------------
+
 static int
 compiler_visit_expr(struct compiler *c, expr_ty e)
 {
@@ -2989,6 +3181,7 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
         c->u->u_lineno = e->lineno;
         c->u->u_lineno_set = false;
     }
+
     switch (e->kind) {
     case BoolOp_kind:
         return compiler_boolop(c, e);
@@ -3120,6 +3313,10 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
     return 1;
 }
 
+//-----------------------------------------------------------------------------
+
+// 带参数赋值
+// + 也就是给对象的成员赋值，对象就是那个参数
 static int
 compiler_augassign(struct compiler *c, stmt_ty s)
 {
@@ -3130,10 +3327,12 @@ compiler_augassign(struct compiler *c, stmt_ty s)
 
     switch (e->kind) {
     case Attribute_kind:
+
         auge = Attribute(e->v.Attribute.value, e->v.Attribute.attr,
                          AugLoad, e->lineno, e->col_offset, c->c_arena);
         if (auge == NULL)
             return 0;
+
         VISIT(c, expr, auge);
         VISIT(c, expr, s->v.AugAssign.value);
         ADDOP(c, inplace_binop(c, s->v.AugAssign.op));
@@ -3157,6 +3356,7 @@ compiler_augassign(struct compiler *c, stmt_ty s)
         VISIT(c, expr, s->v.AugAssign.value);
         ADDOP(c, inplace_binop(c, s->v.AugAssign.op));
         return compiler_nameop(c, e->v.Name.id, Store);
+
     default:
         PyErr_Format(PyExc_SystemError,
             "invalid node type (%d) for augmented assignment",
@@ -3409,6 +3609,7 @@ compiler_visit_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
     return compiler_handle_subscr(c, kindname, ctx);
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
 /* End of the compiler section, beginning of the assembler section */
 
@@ -3419,50 +3620,66 @@ compiler_visit_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 */
 
 struct assembler {
-    PyObject *a_bytecode;  /* string containing bytecode */
-    int a_offset;              /* offset into bytecode */
-    int a_nblocks;             /* number of reachable blocks */
-    basicblock **a_postorder; /* list of blocks in dfs postorder */
-    PyObject *a_lnotab;    /* string containing lnotab */
-    int a_lnotab_off;      /* offset into lnotab */
-    int a_lineno;              /* last lineno of emitted instruction */
-    int a_lineno_off;      /* bytecode offset of last lineno */
+    PyObject *a_bytecode;       /* string containing bytecode */
+    int a_offset;               /* offset into bytecode */
+    int a_nblocks;              /* number of reachable blocks */
+    basicblock **a_postorder;   /* list of blocks in dfs postorder */
+    PyObject *a_lnotab;         /* string containing lnotab */
+    int a_lnotab_off;           /* offset into lnotab */
+    int a_lineno;               /* last lineno of emitted instruction */
+    int a_lineno_off;           /* bytecode offset of last lineno */
 };
 
+// 深度优先遍历控制流程图，构造代码块集成队列
 static void
 dfs(struct compiler *c, basicblock *b, struct assembler *a)
 {
     int i;
     struct instr *instr = NULL;
 
+    // 如果已经遍历过
     if (b->b_seen)
         return;
     b->b_seen = 1;
+
+    // （递归）处理下一个代码块
     if (b->b_next != NULL)
         dfs(c, b->b_next, a);
+
+    // 遍历当前代码块中的指令队列
     for (i = 0; i < b->b_iused; i++) {
         instr = &b->b_instr[i];
+
+        // 对于调用指令
         if (instr->i_jrel || instr->i_jabs)
             dfs(c, instr->i_target, a);
     }
+
+    // 将自己添加到代码块集成队列
     a->a_postorder[a->a_nblocks++] = b;
 }
 
+// stackdepth 的递归实现
 static int
 stackdepth_walk(struct compiler *c, basicblock *b, int depth, int maxdepth)
-{
+{   // @ stackdepth
+
     int i, target_depth;
     struct instr *instr;
     if (b->b_seen || b->b_startdepth >= depth)
         return maxdepth;
+
     b->b_seen = 1;
     b->b_startdepth = depth;
     for (i = 0; i < b->b_iused; i++) {
         instr = &b->b_instr[i];
+
         depth += opcode_stack_effect(instr->i_opcode, instr->i_oparg);
         if (depth > maxdepth)
             maxdepth = depth;
         assert(depth >= 0); /* invalid code or bug in stackdepth() */
+
+        // 
         if (instr->i_jrel || instr->i_jabs) {
             target_depth = depth;
             if (instr->i_opcode == FOR_ITER) {
@@ -3473,8 +3690,7 @@ stackdepth_walk(struct compiler *c, basicblock *b, int depth, int maxdepth)
                 if (target_depth > maxdepth)
                     maxdepth = target_depth;
             }
-            maxdepth = stackdepth_walk(c, instr->i_target,
-                                       target_depth, maxdepth);
+            maxdepth = stackdepth_walk(c, instr->i_target, target_depth, maxdepth);
             if (instr->i_opcode == JUMP_ABSOLUTE ||
                 instr->i_opcode == JUMP_FORWARD) {
                 goto out; /* remaining code is dead */
@@ -3491,11 +3707,14 @@ out:
 /* Find the flow path that needs the largest stack.  We assume that
  * cycles in the flow graph have no net effect on the stack depth.
  */
+ // 遍历计算各个代码块所需的最大栈空间
 static int
 stackdepth(struct compiler *c)
-{
+{   // @ makecode
+
     basicblock *b, *entryblock;
     entryblock = NULL;
+
     for (b = c->u->u_blocks; b != NULL; b = b->b_list) {
         b->b_seen = 0;
         b->b_startdepth = INT_MIN;
@@ -3503,30 +3722,39 @@ stackdepth(struct compiler *c)
     }
     if (!entryblock)
         return 0;
+
     return stackdepth_walk(c, entryblock, 0, 0);
 }
 
 static int
 assemble_init(struct assembler *a, int nblocks, int firstlineno)
-{
+{   // @ assemble
+
     memset(a, 0, sizeof(struct assembler));
+
     a->a_lineno = firstlineno;
+
+    // 字节码对象
     a->a_bytecode = PyString_FromStringAndSize(NULL, DEFAULT_CODE_SIZE);
     if (!a->a_bytecode)
         return 0;
+
+    // 代码行号表
     a->a_lnotab = PyString_FromStringAndSize(NULL, DEFAULT_LNOTAB_SIZE);
     if (!a->a_lnotab)
         return 0;
+
+    // 分配代码块集成队列
     if (nblocks > PY_SIZE_MAX / sizeof(basicblock *)) {
         PyErr_NoMemory();
         return 0;
     }
-    a->a_postorder = (basicblock **)PyObject_Malloc(
-                                        sizeof(basicblock *) * nblocks);
+    a->a_postorder = (basicblock **)PyObject_Malloc(sizeof(basicblock *) * nblocks);
     if (!a->a_postorder) {
         PyErr_NoMemory();
         return 0;
     }
+
     return 1;
 }
 
@@ -3566,9 +3794,11 @@ blocksize(basicblock *b)
    the instruction's bytecode offset and line number.  See
    Objects/lnotab_notes.txt for the description of the line number table. */
 
+// 构造指令所在源文件中的行号表
 static int
 assemble_lnotab(struct assembler *a, struct instr *i)
-{
+{   // @ assemble_emit
+
     int d_bytecode, d_lineno;
     int len;
     unsigned char *lnotab;
@@ -3664,9 +3894,11 @@ assemble_lnotab(struct assembler *a, struct instr *i)
    Update lnotab if necessary.
 */
 
+// 生成指令字节码，并添加到字节码队列中
 static int
 assemble_emit(struct assembler *a, struct instr *i)
-{
+{   // assemble
+
     int size, arg = 0, ext = 0;
     Py_ssize_t len = PyString_GET_SIZE(a->a_bytecode);
     char *code;
@@ -3702,9 +3934,11 @@ assemble_emit(struct assembler *a, struct instr *i)
     return 1;
 }
 
+// 集成构造指定跳转地址
 static void
 assemble_jump_offsets(struct assembler *a, struct compiler *c)
-{
+{   // assemble
+
     basicblock *b;
     int bsize, totsize, extended_arg_count = 0, last_extended_arg_count;
     int i;
@@ -3760,16 +3994,20 @@ assemble_jump_offsets(struct assembler *a, struct compiler *c)
     } while (last_extended_arg_count != extended_arg_count);
 }
 
+// 将 dict 中的数据保存到 tuple 中
 static PyObject *
 dict_keys_inorder(PyObject *dict, int offset)
-{
+{   // @ makecode
+
     PyObject *tuple, *k, *v;
     Py_ssize_t i, pos = 0, size = PyDict_Size(dict);
 
     tuple = PyTuple_New(size);
     if (tuple == NULL)
         return NULL;
+
     while (PyDict_Next(dict, &pos, &k, &v)) {
+
         i = PyInt_AS_LONG(v);
         /* The keys of the dictionary are tuples. (see compiler_add_o)
            The object we want is always first, though. */
@@ -3779,12 +4017,14 @@ dict_keys_inorder(PyObject *dict, int offset)
         assert((i - offset) >= 0);
         PyTuple_SET_ITEM(tuple, i - offset, k);
     }
+
     return tuple;
 }
 
 static int
 compute_code_flags(struct compiler *c)
-{
+{   // makecode
+
     PySTEntryObject *ste = c->u->u_ste;
     int flags = 0, n;
     if (ste->ste_type != ModuleBlock)
@@ -3820,9 +4060,11 @@ compute_code_flags(struct compiler *c)
     return flags;
 }
 
+// 构建 pycode 对象
 static PyCodeObject *
 makecode(struct compiler *c, struct assembler *a)
-{
+{   // assemble
+
     PyObject *tmp;
     PyCodeObject *co = NULL;
     PyObject *consts = NULL;
@@ -3924,6 +4166,7 @@ dump_basicblock(const basicblock *b)
 }
 #endif
 
+// 集成处理
 static PyCodeObject *
 assemble(struct compiler *c, int addNone)
 {
@@ -3951,20 +4194,27 @@ assemble(struct compiler *c, int addNone)
     }
 
     /* Set firstlineno if it wasn't explicitly set. */
+    // 初始化设置第一行的行号
     if (!c->u->u_firstlineno) {
         if (entryblock && entryblock->b_instr)
             c->u->u_firstlineno = entryblock->b_instr->i_lineno;
         else
             c->u->u_firstlineno = 1;
     }
+
+    // 初始化集成器
     if (!assemble_init(&a, nblocks, c->u->u_firstlineno))
         goto error;
+
+    // 构造代码块集成队列
     dfs(c, entryblock, &a);
 
     /* Can't modify the bytecode after computing jump offsets. */
+    // 构造指令跳转地址偏移量
     assemble_jump_offsets(&a, c);
 
     /* Emit code in reverse postorder from dfs. */
+    // 构造字节码队列
     for (i = a.a_nblocks - 1; i >= 0; i--) {
         b = a.a_postorder[i];
         for (j = 0; j < b->b_iused; j++)
@@ -3972,12 +4222,15 @@ assemble(struct compiler *c, int addNone)
                 goto error;
     }
 
+    // 调整缓冲大小
     if (_PyString_Resize(&a.a_lnotab, a.a_lnotab_off) < 0)
         goto error;
     if (_PyString_Resize(&a.a_bytecode, a.a_offset) < 0)
         goto error;
 
+    // 构建 code 对象
     co = makecode(c, &a);
+
  error:
     assemble_free(&a);
     return co;

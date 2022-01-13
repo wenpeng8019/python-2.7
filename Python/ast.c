@@ -225,16 +225,24 @@ PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
     node *ch;
     struct compiling c;
 
+    // 如果源文件是 utf-8 编码
     if (flags && flags->cf_flags & PyCF_SOURCE_IS_UTF8) {
+
         c.c_encoding = "utf-8";
+
+        // 如果 CST 的根节点是 "字符编码声明"
         if (TYPE(n) == encoding_decl) {
             ast_error(n, "encoding declaration in Unicode string");
             goto error;
         }
-    } else if (TYPE(n) == encoding_decl) {
+    }
+    // 如果 CST 的根节点是 "字符编码声明"
+    else if (TYPE(n) == encoding_decl) {
+
         c.c_encoding = STR(n);
         n = CHILD(n, 0);
-    } else {
+    } 
+    else {
         c.c_encoding = NULL;
     }
     c.c_future_unicode = flags && flags->cf_flags & CO_FUTURE_UNICODE_LITERALS;

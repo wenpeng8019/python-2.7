@@ -90,13 +90,13 @@ PyNode_AddChild(register node *n1, int type, char *str, int lineno, int col_offs
     required_capacity = XXXROUNDUP(nch + 1);
     if (current_capacity < 0 || required_capacity < 0)
         return E_OVERFLOW;
+
     if (current_capacity < required_capacity) {
         if (required_capacity > PY_SIZE_MAX / sizeof(node)) {
             return E_NOMEM;
         }
         n = n1->n_child;
-        n = (node *) PyObject_REALLOC(n,
-                                      required_capacity * sizeof(node));
+        n = (node *) PyObject_REALLOC(n, required_capacity * sizeof(node));
         if (n == NULL)
             return E_NOMEM;
         n1->n_child = n;

@@ -1549,6 +1549,7 @@ PyParser_ASTFromFile(FILE *fp, const char *filename, int start, char *ps1,
     perrdetail err;
     int iflags = PARSER_FLAGS(flags);
 
+    // 解析源码文件，获得语法树（CST）
     node *n = PyParser_ParseFileFlagsEx(fp, filename, &_PyParser_Grammar,
                             start, ps1, ps2, &err, &iflags);
     if (flags == NULL) {
@@ -1556,7 +1557,7 @@ PyParser_ASTFromFile(FILE *fp, const char *filename, int start, char *ps1,
         flags = &localflags;
     }
 
-    // （如果词法解析成功）将 concrete syntax tree (CST) 树转换为 abstract syntax tree (AST)
+    // 将 concrete syntax tree (CST) 树转换为 abstract syntax tree (AST)
     if (n) {
         flags->cf_flags |= iflags & PyCF_MASK;
         mod = PyAST_FromNode(n, flags, filename, arena);

@@ -7,13 +7,13 @@ extern "C" {
 
 /* Instruction opcodes for compiled code */
 
-#define STOP_CODE	0
-#define POP_TOP		1
+#define STOP_CODE	   0
+#define POP_TOP		1        /* 出栈 */
 #define ROT_TWO		2
-#define ROT_THREE	3
+#define ROT_THREE	   3        /* 返回栈顶元素 */
 #define DUP_TOP		4
-#define ROT_FOUR	5
-#define NOP		9
+#define ROT_FOUR	   5
+#define NOP		      9
 
 #define UNARY_POSITIVE	10
 #define UNARY_NEGATIVE	11
