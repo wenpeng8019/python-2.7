@@ -9,38 +9,51 @@ module Python version "$Revision$"
 	    -- not really an actual node but useful in Jython's typesystem.
 	    | Suite(stmt* body)
 
-	stmt = FunctionDef(identifier name, arguments args, 
+	-- 陈述语句。也就是不返回值的操作
+	stmt =
+	      -- def 定义
+			FunctionDef(identifier name, arguments args, 
                             stmt* body, expr* decorator_list)
+		   -- class 定义
 	      | ClassDef(identifier name, expr* bases, stmt* body, expr* decorator_list)
+		   -- return 语句
 	      | Return(expr? value)
-
+		   -- del 语句
 	      | Delete(expr* targets)
+		   -- 赋值语句
 	      | Assign(expr* targets, expr value)
+		   -- 带参（针对对象成员）的赋值语言
 	      | AugAssign(expr target, operator op, expr value)
 
 	      -- not sure if bool is allowed, can always use int
+		  -- print 语句
  	      | Print(expr? dest, expr* values, bool nl)
 
 	      -- use 'orelse' because else is a keyword in target languages
+		  -- 使用了 else 关键字的语句		  
 	      | For(expr target, expr iter, stmt* body, stmt* orelse)
 	      | While(expr test, stmt* body, stmt* orelse)
 	      | If(expr test, stmt* body, stmt* orelse)
 	      | With(expr context_expr, expr? optional_vars, stmt* body)
 
 	      -- 'type' is a bad name
+		  -- 异常和断言语句
 	      | Raise(expr? type, expr? inst, expr? tback)
 	      | TryExcept(stmt* body, excepthandler* handlers, stmt* orelse)
 	      | TryFinally(stmt* body, stmt* finalbody)
 	      | Assert(expr test, expr? msg)
 
+		  -- 导入语句
 	      | Import(alias* names)
 	      | ImportFrom(identifier? module, alias* names, int? level)
 
 	      -- Doesn't capture requirement that locals must be
 	      -- defined if globals is
 	      -- still supports use as a function!
+		  -- exec 语句
 	      | Exec(expr body, expr? globals, expr? locals)
 
+		  -- global、pass 和表达式语句
 	      | Global(identifier* names)
 	      | Expr(expr value)
 	      | Pass | Break | Continue
@@ -49,23 +62,36 @@ module Python version "$Revision$"
 	      -- col_offset is the byte offset in the utf8 string the parser uses
 	      attributes (int lineno, int col_offset)
 
-	      -- BoolOp() can use left & right?
-	expr = BoolOp(boolop op, expr* values)
+	-- BoolOp() can use left & right?
+	-- 表达式语句。也就是会返回一个值
+	expr = 
+		 -- 逻辑表达式
+	       BoolOp(boolop op, expr* values)
+		 -- 双目运算
 	     | BinOp(expr left, operator op, expr right)
+		 -- 单目运算
 	     | UnaryOp(unaryop op, expr operand)
+		 -- lambda 表达式
 	     | Lambda(arguments args, expr body)
+		 -- if 表达式
 	     | IfExp(expr test, expr body, expr orelse)
+		 -- dict 类型数据构造
 	     | Dict(expr* keys, expr* values)
+		 -- set 类型数据构造
 	     | Set(expr* elts)
+		 -- 
 	     | ListComp(expr elt, comprehension* generators)
 	     | SetComp(expr elt, comprehension* generators)
 	     | DictComp(expr key, expr value, comprehension* generators)
 	     | GeneratorExp(expr elt, comprehension* generators)
 	     -- the grammar constrains where yield expressions can occur
+		 -- yield 表达式
 	     | Yield(expr? value)
 	     -- need sequences for compare to distinguish between
 	     -- x < 4 < 3 and (x < 4) < 3
+		 -- 比对计算表达式
 	     | Compare(expr left, cmpop* ops, expr* comparators)
+		 -- 调用表达式
 	     | Call(expr func, expr* args, keyword* keywords,
 			 expr? starargs, expr? kwargs)
 	     | Repr(expr value)
@@ -83,6 +109,9 @@ module Python version "$Revision$"
 	      -- col_offset is the byte offset in the utf8 string the parser uses
 	      attributes (int lineno, int col_offset)
 
+    -- 下面命令是上面 stmt 和 expr 的二级操作 --
+
+	-- 表达式上下文相关操作
 	expr_context = Load | Store | Del | AugLoad | AugStore | Param
 
 	slice = Ellipsis | Slice(expr? lower, expr? upper, expr? step) 
